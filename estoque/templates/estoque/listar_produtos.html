@@ -1,0 +1,37 @@
+{% extends 'estoque/base.html' %}
+
+{% block content %}
+    <form method="get">
+        <input type="text" name="q" placeholder="Buscar produto" value="{{ termo }}">
+        <button type="submit">Buscar</button>
+    </form>
+
+    <p><a href="{% url 'cadastrar_produto' %}">Cadastrar novo produto</a></p>
+
+    <table border="1">
+        <tr>
+            <th>ID</th>
+            <th>Nome</th>
+            <th>Categoria</th>
+            <th>Preço</th>
+            <th>Qtd. atual</th>
+            <th>Qtd. mínima</th>
+            <th></th>
+            <th></th>
+        </tr>
+        {% for produto in produtos %}
+        <tr>
+            <td>{{ produto.id }}</td>
+            <td>{{ produto.nome }}</td>
+            <td>{{ produto.categoria }}</td>
+            <td>{{ produto.preco }}</td>
+            <td>{{ produto.quantidade_atual }}{% if produto.estoque_baixo %} (baixo){% endif %}</td>
+            <td>{{ produto.quantidade_minima }}</td>
+            <td><a href="{% url 'detalhe_produto' produto.id %}">Ver</a></td>
+            <td><a href="{% url 'excluir_produto' produto.id %}">Excluir</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8">Nenhum produto cadastrado.</td></tr>
+        {% endfor %}
+    </table>
+{% endblock %}

@@ -1,0 +1,25 @@
+{% extends 'estoque/base.html' %}
+
+{% block content %}
+    <h2>Cadastrar produto</h2>
+    <form method="post">
+        {% csrf_token %}
+        <p>
+            <label>Nome</label><br>
+            <input type="text" name="nome" required>
+        </p>
+        <p>
+            <label>Categoria</label><br>
+            <input type="text" name="categoria">
+        </p>
+        <p>
+            <label>Preço</label><br>
+            <input type="number" step="0.01" name="preco" required>
+        </p>
+        <p>
+            <label>Quantidade mínima</label><br>
+            <input type="number" name="quantidade_minima" value="0">
+        </p>
+        <button type="submit">Salvar</button>
+    </form>
+{% endblock %}

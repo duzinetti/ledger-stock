@@ -1,0 +1,26 @@
+{% extends 'estoque/base.html' %}
+
+{% block content %}
+    <h2>Registrar movimentação - {{ produto.nome }}</h2>
+    <p>Quantidade atual: {{ produto.quantidade_atual }}</p>
+
+    <form method="post">
+        {% csrf_token %}
+        <p>
+            <label>Tipo</label><br>
+            <select name="tipo">
+                <option value="E">Entrada</option>
+                <option value="S">Saída</option>
+            </select>
+        </p>
+        <p>
+            <label>Quantidade</label><br>
+            <input type="number" name="quantidade" min="1" required>
+        </p>
+        <p>
+            <label>Motivo</label><br>
+            <input type="text" name="motivo">
+        </p>
+        <button type="submit">Registrar</button>
+    </form>
+{% endblock %}

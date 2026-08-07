@@ -1,0 +1,12 @@
+{% extends 'estoque/base.html' %}
+
+{% block content %}
+    <h2>Excluir produto</h2>
+    <p>Tem certeza que deseja excluir <strong>{{ produto.nome }}</strong>? Todo o histórico de movimentações desse produto também será apagado.</p>
+
+    <form method="post">
+        {% csrf_token %}
+        <button type="submit">Confirmar exclusão</button>
+        <a href="{% url 'detalhe_produto' produto.id %}">Cancelar</a>
+    </form>
+{% endblock %}
