@@ -1,6 +1,6 @@
 from django.apps import AppConfig
 
 
-class EstoqueConfig(AppConfig):
+class InventoryConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
-    name = 'estoque'
+    name = 'inventory'

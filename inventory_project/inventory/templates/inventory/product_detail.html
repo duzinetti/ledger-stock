@@ -1,0 +1,37 @@
+{% extends 'inventory/base.html' %}
+
+{% block content %}
+    <h2>{{ product.name }}</h2>
+    <p>Categoria: {{ product.category }}</p>
+    <p>Preço: {{ product.price }}</p>
+    <p>Quantidade atual: {{ product.current_quantity }}{% if product.low_stock %} (abaixo do mínimo){% endif %}</p>
+    <p>Quantidade mínima: {{ product.minimum_quantity }}</p>
+
+    <p>
+        <a href="{% url 'movement_create' product.id %}">Registrar movimentação</a>
+        |
+        <a href="{% url 'product_update' product.id %}">Editar produto</a>
+        |
+        <a href="{% url 'product_delete' product.id %}">Excluir produto</a>
+    </p>
+
+    <h3>Histórico</h3>
+    <table border="1">
+        <tr>
+            <th>Tipo</th>
+            <th>Quantidade</th>
+            <th>Data</th>
+            <th>Motivo</th>
+        </tr>
+        {% for movement in movements %}
+        <tr>
+            <td>{{ movement.get_type_display }}</td>
+            <td>{{ movement.quantity }}</td>
+            <td>{{ movement.date }}</td>
+            <td>{{ movement.reason }}</td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="4">Nenhuma movimentação registrada.</td></tr>
+        {% endfor %}
+    </table>
+{% endblock %}

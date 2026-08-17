@@ -1,16 +1,16 @@
-{% extends 'estoque/base.html' %}
+{% extends 'inventory/base.html' %}
 
 {% block content %}
-    <h2>Registrar movimentação - {{ produto.nome }}</h2>
-    <p>Quantidade atual: {{ produto.quantidade_atual }}</p>
+    <h2>Registrar movimentação - {{ product.name }}</h2>
+    <p>Quantidade atual: {{ product.current_quantity }}</p>
 
     <form method="post">
         {% csrf_token %}
         <p>
             <label>Tipo</label><br>
             <select name="tipo">
-                <option value="E">Entrada</option>
-                <option value="S">Saída</option>
+                <option value="IN">Entrada</option>
+                <option value="OUT">Saída</option>
             </select>
         </p>
         <p>

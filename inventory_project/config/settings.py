@@ -1,5 +1,5 @@
 """
-Configurações do projeto estoque_project.
+Project settings for the inventory management system.
 """
 from pathlib import Path
 
@@ -19,7 +19,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'estoque',
+    'inventory',
 ]
 
 MIDDLEWARE = [
@@ -32,7 +32,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'estoque_project.urls'
+ROOT_URLCONF = 'config.urls'
 
 TEMPLATES = [
     {
@@ -50,7 +50,7 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = 'estoque_project.wsgi.application'
+WSGI_APPLICATION = 'config.wsgi.application'
 
 # Banco de dados: SQLite para desenvolvimento.
 # Para migrar para MySQL, trocar o ENGINE e preencher as demais chaves:
