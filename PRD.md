@@ -168,8 +168,53 @@ MVP de B2B ferramenta operacional — funcional, seguro, sem
   Questão Aberta #1**
 - Gestão de fornecedores e pedido de compra
 - Integração com PDV / marketplace
-- Previsão de demanda / sugestão de reposição (com ou sem IA)
+- Camada de IA sobre os dados de estoque (detalhada abaixo)
 - App mobile nativo (hoje seria web responsivo)
+
+#### Detalhamento da camada de IA (Later)
+
+Deliberadamente fora do MVP: nenhuma das dores da Seção 1 (estoque
+fantasma, falta de rastreabilidade, decisão de compra no escuro) exige
+IA para ser resolvida — um dashboard com número confiável já resolve a
+maior parte. IA aqui é um diferencial de produto sobre uma base já
+sólida, não um requisito de confiabilidade. Por isso entra só depois
+de MVP e V2 estarem consolidados (a API da Fase V2 é pré-requisito
+técnico — a IA consome os mesmos endpoints/lógica de negócio).
+
+- **Assistente conversacional no dashboard** — perguntas em linguagem
+  natural ("quais produtos estão com estoque baixo?", "quanto saiu de
+  X esse mês?") traduzidas em consultas ao sistema via tool calling.
+  Resolve a persona Marcos, que "abre o sistema no fim do dia pra ver
+  como estão as coisas" — reduz a fricção de interpretar tabela/gráfico.
+- **Resumos automáticos em linguagem natural** — em vez de só números
+  no dashboard, um texto gerado a partir dos dados agregados (ex: "o
+  estoque de X caiu 30% essa semana, considere repor"). Baixo esforço
+  de implementação uma vez que a API (V2) já expõe os dados agregados.
+- **Sugestão de categoria automática** — ao cadastrar um produto só
+  com o nome, sugerir a categoria com base em produtos semelhantes já
+  cadastrados. Resolve parcialmente a dívida técnica assumida no MVP
+  (categoria como texto livre, PRD 6.1) sem forçar um catálogo fechado
+  de categorias.
+- **Previsão de demanda / sugestão de reposição** — a partir do
+  histórico de `Movimentacao`. **Nota de produto, não só técnica:**
+  esta é a feature de IA com maior risco de gerar decisão financeira
+  ruim se a previsão for ruim (o dono compra errado confiando na
+  sugestão). Recomendo começar com um modelo estatístico simples
+  (média móvel, `pandas`), não com IA generativa, e tratar como
+  sugestão explicável ("baseado na média das últimas 4 semanas"), não
+  como número automático de recompra.
+- **Detecção de anomalias** — sinalizar movimentação fora do padrão
+  (ex: saída muito maior que o normal para aquele produto), podendo
+  indicar erro de digitação ou furto. Conecta diretamente ao Goal de
+  rastreabilidade da Seção 3, mas é V-Later porque depende de volume
+  histórico suficiente de movimentações para o padrão "normal" fazer
+  sentido — não faz sentido tentar isso com poucos meses de dado real.
+
+**Ordem de prioridade dentro do bloco de IA, se/quando for
+implementado:** resumos automáticos e assistente conversacional
+primeiro (baixo risco, alto valor percebido pelo Marcos); previsão de
+demanda e detecção de anomalias por último (maior risco se errarem, e
+dependem de mais dado histórico acumulado).
 
 ---
 
