@@ -1,5 +1,6 @@
 from django.contrib.auth.models import User
-from django.db import connection
+from django.db import connection, transaction
+from django.db.utils import IntegrityError
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
@@ -132,3 +133,76 @@ class MovementFormTestCase(TestCase):
     def test_valid_data_is_accepted(self):
         form = MovementForm(data={'type': 'OUT', 'quantity': '3', 'reason': 'Venda'})
         self.assertTrue(form.is_valid())
+
+
+class StockMovementConstraintsTestCase(TestCase):
+    """Covers the DB-level backstop for a write that bypasses MovementForm
+    entirely (e.g. shell, admin, future API) - PRD §6.2/§8.
+    """
+
+    def setUp(self):
+        self.product = Product.objects.create(
+            name='M6 Screw', price=0.50, minimum_quantity=10
+        )
+
+    def test_non_positive_quantity_is_rejected_at_db_level(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                StockMovement.objects.create(product=self.product, type='IN', quantity=0)
+
+    def test_negative_quantity_is_rejected_at_db_level(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                StockMovement.objects.create(product=self.product, type='IN', quantity=-5)
+
+    def test_invalid_type_is_rejected_at_db_level(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                StockMovement.objects.create(product=self.product, type='XX', quantity=5)
+
+
+class StockMovementAdminPermissionsTestCase(TestCase):
+    """Covers audit-trail-tampering: the movement log must be read-only
+    in admin, since add/change bypass services.register_movement().
+    """
+
+    def setUp(self):
+        self.superuser = User.objects.create_superuser(
+            username='admin', password='senha-teste-123', email='admin@example.com'
+        )
+        self.product = Product.objects.create(
+            name='M6 Screw', price=0.50, minimum_quantity=10
+        )
+        self.movement = StockMovement.objects.create(
+            product=self.product, type='IN', quantity=10
+        )
+        self.client.force_login(self.superuser)
+
+    def test_add_is_blocked(self):
+        response = self.client.get('/admin/inventory/stockmovement/add/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_change_view_is_read_only(self):
+        # Django renders the change page in read-only mode (200, no save
+        # button) rather than 403 when has_view_permission is True but
+        # has_change_permission is False - the real enforcement is that
+        # a POST can't actually alter the record, checked below.
+        response = self.client.get(f'/admin/inventory/stockmovement/{self.movement.id}/change/')
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'name="_save"')
+
+    def test_change_post_does_not_alter_the_record(self):
+        url = f'/admin/inventory/stockmovement/{self.movement.id}/change/'
+        self.client.post(url, {
+            'product': self.product.id, 'type': 'IN', 'quantity': 999, 'reason': '',
+        })
+        self.movement.refresh_from_db()
+        self.assertEqual(self.movement.quantity, 10)
+
+    def test_delete_is_blocked(self):
+        response = self.client.get(f'/admin/inventory/stockmovement/{self.movement.id}/delete/')
+        self.assertEqual(response.status_code, 403)
+
+    def test_list_view_is_still_accessible(self):
+        response = self.client.get('/admin/inventory/stockmovement/')
+        self.assertEqual(response.status_code, 200)

@@ -1,4 +1,5 @@
 from django.conf import settings
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Sum, Case, When, IntegerField, F
 
@@ -83,7 +84,7 @@ class StockMovement(models.Model):
         Product, on_delete=models.CASCADE, related_name='movements'
     )
     type = models.CharField(max_length=3, choices=TYPE_CHOICES)
-    quantity = models.IntegerField()
+    quantity = models.IntegerField(validators=[MinValueValidator(1)])
     date = models.DateTimeField(auto_now_add=True)
     reason = models.CharField(max_length=200, blank=True)
     user = models.ForeignKey(
@@ -97,6 +98,21 @@ class StockMovement(models.Model):
     class Meta:
         indexes = [
             models.Index(fields=['product', 'date']),
+        ]
+        # DB-level backstop for the two business rules that MovementForm
+        # already enforces (PRD §6.2) - a form is only checked on the one
+        # view that uses it; a constraint holds even if a movement is
+        # written through the admin, the shell, or a future API/import
+        # path that bypasses the form entirely.
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(quantity__gt=0),
+                name='stockmovement_quantity_positive',
+            ),
+            models.CheckConstraint(
+                check=models.Q(type__in=['IN', 'OUT']),
+                name='stockmovement_type_valid',
+            ),
         ]
 
     def __str__(self):
