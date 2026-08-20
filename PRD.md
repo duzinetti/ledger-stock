@@ -335,7 +335,7 @@ otimizada ou, no limite, desnormalização futura.
 |---|---|
 | Dois usuários registram saída do mesmo produto ao mesmo tempo, cada um dentro do limite individual, mas juntos excedem o estoque | Sistema deve processar uma por vez (lock), a segunda deve ver o estoque já atualizado e ser bloqueada se necessário |
 | Usuário tenta registrar saída maior que o disponível | Erro claro, mostrando quantidade disponível real, nenhum registro é criado |
-| Produto excluído tem histórico de movimentações | **Flag: decisão não tomada.** Excluir o produto apaga o histórico junto (cascade) ou deveria "arquivar" em vez de excluir, preservando auditoria? Para um sistema comercial real, recomendo **soft delete** (campo `ativo=False`) em vez de exclusão física, para não perder rastreabilidade — isso muda o MVP se aceito. |
+| Produto excluído tem histórico de movimentações | **Decidido (2026-08-19):** soft delete. Excluir um produto não apaga fisicamente o registro nem seu histórico de `StockMovement` — apenas marca `active=False`. Queryset padrão (`Product.objects.active()`) exclui produtos inativos da listagem, preservando auditabilidade. Implementado em `319e767`/`6bd8058`. |
 | Usuário perde conexão no meio do registro de uma movimentação | Nenhuma escrita parcial no banco — operação deve ser atômica (já coberto pela transação) |
 | Preço ou quantidade inserido como texto/negativo | Validação de servidor rejeita, nunca só validação de front-end |
 | Sessão expira enquanto usuário preenche formulário longo | Sistema deve redirecionar para login sem perder claramente o que causou o erro (mensagem clara, não erro técnico cru) |
@@ -388,9 +388,8 @@ sistema está resolvendo a dor real (confiabilidade do número).
    **Recomendação:** decidir isso antes de iniciar a Fase 2 (banco de
    dados) do roadmap técnico, não depois.
 
-2. **Soft delete vs. exclusão física de produto** — impacta
-   diretamente auditabilidade, que é um dos goals centrais do
-   produto (ver Seção 8).
+2. ~~**Soft delete vs. exclusão física de produto**~~ — **Resolvido
+   (2026-08-19): soft delete**, via campo `Product.active` (ver Seção 8).
 
 3. **Listagem de produtos deve ser pública ou exigir login sempre?**
    Recomendação dada em 6.4, mas não confirmada como decisão de
