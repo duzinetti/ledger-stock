@@ -1,12 +1,12 @@
 {% extends 'inventory/base.html' %}
 
 {% block content %}
-    <h2>Excluir produto</h2>
-    <p>Tem certeza que deseja excluir <strong>{{ product.name }}</strong>? Todo o histórico de movimentações desse produto também será apagado.</p>
+    <h2>Inativar produto</h2>
+    <p>Tem certeza que deseja inativar <strong>{{ product.name }}</strong>? O produto deixará de aparecer na listagem, mas seu histórico de movimentações permanece preservado.</p>
 
     <form method="post">
         {% csrf_token %}
-        <button type="submit">Confirmar exclusão</button>
+        <button type="submit">Confirmar inativação</button>
         <a href="{% url 'product_detail' product.id %}">Cancelar</a>
     </form>
 {% endblock %}

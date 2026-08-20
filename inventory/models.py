@@ -22,6 +22,13 @@ class ProductQuerySet(models.QuerySet):
             )
         )
 
+    def active(self):
+        """Excludes soft-deleted products (active=False), while still
+        leaving them fully reachable through other paths (detail page,
+        admin, movement history) - only product_list calls this.
+        """
+        return self.filter(active=True)
+
 
 class Product(models.Model):
     name = models.CharField(max_length=100)
@@ -29,6 +36,7 @@ class Product(models.Model):
     price = models.DecimalField(max_digits=10, decimal_places=2)
     minimum_quantity = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
+    active = models.BooleanField(default=True, verbose_name='Ativo')
 
     objects = ProductQuerySet.as_manager()
 

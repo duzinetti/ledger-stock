@@ -24,6 +24,40 @@ class InsufficientStockError(Exception):
         )
 
 
+class InvalidQuantityError(Exception):
+    """Raised when a movement quantity is not a positive integer."""
+
+    def __init__(self, quantity):
+        self.quantity = quantity
+        super().__init__(
+            f'Invalid quantity: {quantity}. Quantity must be greater than zero.'
+        )
+
+
+class InvalidMovementTypeError(Exception):
+    """Raised when a movement type is not IN or OUT."""
+
+    def __init__(self, movement_type):
+        self.movement_type = movement_type
+        super().__init__(
+            f'Invalid movement type: "{movement_type}". Must be "IN" or "OUT".'
+        )
+
+
+class InactiveProductError(Exception):
+    """Raised when a movement is attempted on a soft-deleted product that
+    has already been drawn down to zero - active=False products still
+    holding stock may keep receiving movements until that stock is
+    reconciled, but a fully wound-down product accepts no further activity.
+    """
+
+    def __init__(self, product):
+        self.product = product
+        super().__init__(
+            f'Product "{product.name}" is inactive and has no stock left to move.'
+        )
+
+
 def register_movement(product_id, movement_type, quantity, reason='', user=None):
     """Registers a stock movement safely under concurrent access.
 
@@ -34,8 +68,21 @@ def register_movement(product_id, movement_type, quantity, reason='', user=None)
     negative stock (a classic race condition in systems with
     concurrent access).
     """
+    if quantity <= 0: 
+        raise InvalidQuantityError(
+            quantity
+        )
+    
+    if movement_type not in (StockMovement.IN, StockMovement.OUT):
+        raise InvalidMovementTypeError(
+            movement_type
+        )
+
     with transaction.atomic():
         product = Product.objects.select_for_update().get(id=product_id)
+
+        if not product.active and product.current_quantity <= 0:
+            raise InactiveProductError(product)
 
         if movement_type == StockMovement.OUT and quantity > product.current_quantity:
             raise InsufficientStockError(

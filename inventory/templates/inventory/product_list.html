@@ -31,7 +31,7 @@
                 <a href="{% url 'product_detail' product.id %}">Ver</a>
                 | <a href="{% url 'product_update' product.id %}">Editar</a>
             </td>
-            <td><a href="{% url 'product_delete' product.id %}">Excluir</a></td>
+            <td><a href="{% url 'product_delete' product.id %}">Inativar</a></td>
         </tr>
         {% empty %}
         <tr><td colspan="8">Nenhum produto cadastrado.</td></tr>

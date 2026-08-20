@@ -7,7 +7,8 @@ from .models import Product, StockMovement
 # there is no MVP requirement for an admin-facing UI beyond Django's.
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ('name', 'category', 'price', 'current_quantity', 'minimum_quantity', 'low_stock')
+    list_display = ('name', 'category', 'price', 'current_quantity', 'minimum_quantity', 'low_stock', 'active')
+    list_filter = ('active',)
     search_fields = ('name', 'category')
 
 

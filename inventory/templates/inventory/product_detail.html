@@ -1,7 +1,7 @@
 {% extends 'inventory/base.html' %}
 
 {% block content %}
-    <h2>{{ product.name }}</h2>
+    <h2>{{ product.name }}{% if not product.active %} (inativo){% endif %}</h2>
     <p>Categoria: {{ product.category }}</p>
     <p>Preço: {{ product.price }}</p>
     <p>Quantidade atual: {{ product.current_quantity }}{% if product.low_stock %} (abaixo do mínimo){% endif %}</p>
@@ -12,7 +12,7 @@
         |
         <a href="{% url 'product_update' product.id %}">Editar produto</a>
         |
-        <a href="{% url 'product_delete' product.id %}">Excluir produto</a>
+        <a href="{% url 'product_delete' product.id %}">Inativar produto</a>
     </p>
 
     <h3>Histórico</h3>

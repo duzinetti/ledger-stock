@@ -7,7 +7,13 @@ from django.urls import reverse
 
 from .forms import MovementForm, ProductForm
 from .models import Product, StockMovement
-from .services import register_movement, InsufficientStockError
+from .services import (
+    register_movement,
+    InactiveProductError,
+    InsufficientStockError,
+    InvalidMovementTypeError,
+    InvalidQuantityError,
+)
 
 
 class CurrentQuantityTestCase(TestCase):
@@ -65,6 +71,38 @@ class RegisterMovementServiceTestCase(TestCase):
 
         # No movement should be created when validation fails.
         self.assertEqual(self.product.movements.count(), 1)
+
+    def test_invalid_quantity_is_rejected(self):
+        with self.assertRaises(InvalidQuantityError):
+            register_movement(self.product.id, movement_type='IN', quantity=-5)
+
+        # No movement should be created when validation fails.
+        self.assertEqual(self.product.movements.count(), 1)
+
+    def test_invalid_movement_type_is_rejected(self):
+        with self.assertRaises(InvalidMovementTypeError):
+            register_movement(self.product.id, movement_type='XYZ', quantity=5)
+
+        self.assertEqual(self.product.movements.count(), 1)
+
+    def test_movement_on_inactive_product_with_stock_is_allowed(self):
+        # active=False products may still be drawn down until reconciled
+        # to zero - self.product has 20 units from setUp.
+        self.product.active = False
+        self.product.save(update_fields=['active'])
+
+        register_movement(self.product.id, movement_type='OUT', quantity=5)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.current_quantity, 15)
+
+    def test_movement_on_inactive_product_without_stock_is_blocked(self):
+        empty_product = Product.objects.create(
+            name='Discontinued Widget', price=1, minimum_quantity=0, active=False
+        )
+        with self.assertRaises(InactiveProductError):
+            register_movement(empty_product.id, movement_type='IN', quantity=5)
+
+        self.assertEqual(empty_product.movements.count(), 0)
 
 
 class LoginRequiredTestCase(TestCase):
@@ -159,6 +197,44 @@ class StockMovementConstraintsTestCase(TestCase):
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
                 StockMovement.objects.create(product=self.product, type='XX', quantity=5)
+
+
+class ProductSoftDeleteTestCase(TestCase):
+    """Covers PRD §8/§10.2's soft-delete decision: a "deleted" product is
+    deactivated (active=False), never physically removed, so its
+    StockMovement history stays intact for audit purposes.
+    """
+
+    def setUp(self):
+        self.product = Product.objects.create(
+            name='M6 Screw', price=0.50, minimum_quantity=10
+        )
+        StockMovement.objects.create(product=self.product, type='IN', quantity=10)
+        self.user = User.objects.create_user(username='juliana', password='senha-teste-123')
+        self.client.force_login(self.user)
+
+    def test_delete_view_deactivates_instead_of_removing_the_row(self):
+        self.client.post(reverse('product_delete', args=[self.product.id]))
+
+        self.product.refresh_from_db()
+        self.assertFalse(self.product.active)
+        self.assertTrue(Product.objects.filter(id=self.product.id).exists())
+
+    def test_inactive_product_is_excluded_from_listing(self):
+        self.product.active = False
+        self.product.save(update_fields=['active'])
+
+        response = self.client.get(reverse('product_list'))
+        self.assertNotContains(response, self.product.name)
+
+    def test_inactive_product_detail_is_still_accessible_with_history(self):
+        self.product.active = False
+        self.product.save(update_fields=['active'])
+
+        response = self.client.get(reverse('product_detail', args=[self.product.id]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.product.name)
+        self.assertEqual(len(response.context['movements']), 1)
 
 
 class StockMovementAdminPermissionsTestCase(TestCase):

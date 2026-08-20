@@ -5,7 +5,7 @@ from django.contrib import messages
 from .forms import MovementForm, ProductForm
 from .models import Product, StockMovement
 from .services import register_movement as register_movement_service
-from .services import InsufficientStockError
+from .services import InsufficientStockError, InactiveProductError
 
 
 @login_required
@@ -22,7 +22,7 @@ def product_list(request):
     # SINGLE query, instead of firing an aggregation query per
     # product (N+1) as would happen using the `current_quantity`
     # property inside the template loop.
-    products = Product.objects.with_current_quantity().order_by('name')
+    products = Product.objects.active().with_current_quantity().order_by('name')
     if search_term:
         products = products.filter(name__icontains=search_term)
 
@@ -93,19 +93,20 @@ def product_detail(request, product_id):
 
 @login_required
 def product_delete(request, product_id):
-    """Hard-deletes a product (confirmation page on GET, delete on POST).
+    """Soft-deletes a product (confirmation page on GET, deactivation on POST).
 
-    Login-gated per PRD §6.4. Hard delete is what the PRD's data model
-    currently implies; soft-delete is an explicit open question in the
-    PRD (§8/§10.2) that the product owner hasn't decided yet, so this
-    function is left as-is rather than guessed at.
+    Sets active=False instead of removing the row, so the product's
+    movement history stays intact for audit purposes - resolves the
+    soft-delete open question from PRD §8/§10.2. Login-gated per
+    PRD §6.4.
     """
     product = get_object_or_404(Product, id=product_id)
 
     if request.method == 'POST':
         name = product.name
-        product.delete()
-        messages.success(request, f'Produto "{name}" excluído.')
+        product.active = False
+        product.save(update_fields=['active'])
+        messages.success(request, f'Produto "{name}" inativado.')
         return redirect('product_list')
 
     return render(request, 'inventory/product_delete.html', {'product': product})
@@ -137,6 +138,12 @@ def movement_create(request, product_id):
                     request,
                     f'Quantidade de saída maior que o estoque disponível '
                     f'({error.available_quantity} unidades).'
+                )
+                return redirect('product_detail', product_id=product.id)
+            except InactiveProductError:
+                messages.error(
+                    request,
+                    'Produto inativo e sem estoque - não é possível registrar movimentação.'
                 )
                 return redirect('product_detail', product_id=product.id)
 
