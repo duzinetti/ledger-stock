@@ -4,6 +4,7 @@ from django.db.utils import IntegrityError
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
+from django.db.models import ProtectedError
 
 from .forms import MovementForm, ProductForm
 from .models import Product, StockMovement
@@ -235,6 +236,36 @@ class ProductSoftDeleteTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, self.product.name)
         self.assertEqual(len(response.context['movements']), 1)
+
+
+class ProductDeletionProtectionTestCase(TestCase):
+    """Covers the DB-level backstop for product history: on_delete=PROTECT
+    on StockMovement.product means the database itself refuses to delete
+    a Product that still has movements, no matter which code path tries
+    (admin, shell, a future script) - not just the product_delete view,
+    which already avoids physical deletion by design (see
+    ProductSoftDeleteTestCase).
+    """
+
+    def test_deleting_a_product_with_movements_is_blocked_at_db_level(self):
+        product = Product.objects.create(
+            name='M6 Screw', price=0.50, minimum_quantity=10
+        )
+        StockMovement.objects.create(product=product, type='IN', quantity=10)
+
+        with self.assertRaises(ProtectedError):
+            product.delete()
+
+        self.assertTrue(Product.objects.filter(id=product.id).exists())
+
+    def test_deleting_a_product_with_no_movements_is_allowed(self):
+        product = Product.objects.create(
+            name='Never Sold Widget', price=1, minimum_quantity=0
+        )
+
+        product.delete()
+
+        self.assertFalse(Product.objects.filter(id=product.id).exists())
 
 
 class StockMovementAdminPermissionsTestCase(TestCase):
