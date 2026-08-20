@@ -89,7 +89,7 @@ class StockMovement(models.Model):
     ]
 
     product = models.ForeignKey(
-        Product, on_delete=models.CASCADE, related_name='movements'
+        Product, on_delete=models.PROTECT, related_name='movements'
     )
     type = models.CharField(max_length=3, choices=TYPE_CHOICES)
     quantity = models.IntegerField(validators=[MinValueValidator(1)])
