@@ -39,6 +39,3 @@ Thumbs.db
 htmlcov/
 .pytest_cache/
 
-claude.md
-
-.claude/skills
