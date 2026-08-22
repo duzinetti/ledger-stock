@@ -2,7 +2,7 @@
 
 **Autor:** Eduardo Zinetti (Dudu) | **Documento preparado como exercício de Product Management**
 **Status:** Draft v1
-**Última atualização:** 2026-08-17
+**Última atualização:** 2026-08-21
 
 ---
 
@@ -14,11 +14,12 @@ que você delegou algumas decisões:
 - **MVP definido por mim (pergunta 2):** delimitei o MVP como CRUD de
   produtos + movimentação de estoque com concorrência segura +
   autenticação básica + deploy. Justificativa no item 5.
-- **Multi-tenancy (pergunta 3) é a decisão arquitetural mais crítica
-  deste documento** — ver Seção 9, Questão Aberta #1. Você respondeu
-  "eventualmente", o que **não é uma resposta neutra**: decidir agora
-  vs. depois muda o data model desde o dia 1. Estou tratando isso como
-  requisito não resolvido, não decidindo por você.
+- **Multi-tenancy (pergunta 3) foi a decisão arquitetural mais crítica
+  deste documento** — ver Seção 10, Questão Aberta #1 (resolvida em
+  2026-08-21). Na época deste documento você havia respondido
+  "eventualmente", o que não era uma resposta neutra: decidir agora
+  vs. depois muda o data model desde o dia 1 — por isso foi tratada
+  como requisito não resolvido até a decisão formal.
 - **Stack (pergunta 4):** assumo Django + MySQL/PostgreSQL + deploy em
   PaaS gratuito, por ser a stack já em desenvolvimento nas conversas
   anteriores. Se isso não for fixo, a Seção 6 muda.
@@ -298,7 +299,7 @@ Produto
 ├── preco
 ├── quantidade_minima
 ├── criado_em
-└── [FUTURO, se multi-tenant] empresa_id (FK)
+└── empresa_id (FK → Empresa — decidido, ver Questão Aberta #1 resolvida)
 
 Movimentacao
 ├── id
@@ -312,12 +313,17 @@ Movimentacao
 [V2] Categoria
 ├── id
 ├── nome
-└── [FUTURO, se multi-tenant] empresa_id (FK)
+└── empresa_id (FK → Empresa — decidido, ver Questão Aberta #1 resolvida)
 
-[LATER] Empresa (só existe se multi-tenant for adotado)
+Empresa (multi-tenancy decidido — ver Questão Aberta #1 resolvida)
 ├── id
 ├── nome
 └── plano/assinatura
+
+Membership (vínculo usuário ↔ empresa, ver Questão Aberta #1 resolvida)
+├── id
+├── usuario_id (FK → Usuario, OneToOne)
+└── empresa_id (FK → Empresa)
 ```
 
 **Nota de design:** a quantidade atual do produto **não é um campo
@@ -378,15 +384,43 @@ sistema está resolvendo a dor real (confiabilidade do número).
 
 ## 10. Open Questions
 
-1. **Multi-tenancy: decidir agora ou depois?** Esta é a questão mais
-   cara do documento. Se a resposta de longo prazo é "sim,
-   eventualmente", a arquitetura de dados do MVP deveria **já**
-   incluir a FK de `empresa` em `Produto`/`Movimentacao` desde o
-   início — migrar um sistema single-tenant para multi-tenant depois
-   que já tem dados reais é significativamente mais caro e arriscado
-   do que nascer multi-tenant com uma única empresa cadastrada.
-   **Recomendação:** decidir isso antes de iniciar a Fase 2 (banco de
-   dados) do roadmap técnico, não depois.
+1. ~~**Multi-tenancy: decidir agora ou depois?**~~ — **Resolvido
+   (2026-08-21): multi-tenant desde já.** Justificativa: existe
+   intenção real de negócio por trás da pergunta, não curiosidade
+   técnica — o plano é liberar o sistema para duas empresas em teste.
+   Adiar teria significado migrar dados reais de single-tenant para
+   multi-tenant depois, mais caro e arriscado do que nascer
+   multi-tenant.
+
+   Decisão de arquitetura (ver Seção 7 para o schema):
+   - Model `Empresa` novo; `Produto.empresa_id` (FK obrigatória,
+     `on_delete=PROTECT`) é o único ponto do schema que carrega
+     empresa — `Movimentacao` não duplica a FK, alcança a empresa via
+     `movimentacao.produto.empresa` (mesma filosofia de fonte única já
+     usada pela quantidade atual do produto, ver nota de design
+     abaixo).
+   - Vínculo usuário↔empresa via model `Membership`
+     (`OneToOneField(Usuario)` + `FK(Empresa)`), sem trocar o model de
+     usuário nativo do Django (`AUTH_USER_MODEL`) — trocar o model de
+     usuário é caro de desfazer e não resolve um problema que
+     temos (não precisamos mudar o que é um usuário, só anexar a
+     empresa a ele).
+   - Isolamento de dado é obrigatório em todo lookup de objeto
+     específico (detalhe, edição, exclusão, registro de movimentação),
+     não só em listagens — ver dono da empresa A não pode acessar
+     produto da empresa B nem digitando a URL direto.
+   - Papel (Gestor/Operador) via `django.contrib.auth.models.Group`,
+     mecanismo que a Seção 7 já previa para V2 — adiantado agora para
+     restringir quem pode desativar/reativar produto a usuários do
+     grupo Gestor.
+   - Django admin deixa de ser ferramenta de uso do dono/gerente e
+     vira interna/dev-only (só superusuário) — evita vazamento de
+     dado entre empresas por esse caminho sem precisar duplicar lógica
+     de isolamento dentro do admin.
+   - Sequenciamento: implementado depois dos itens de robustez do
+     audit de 2026-08-20 que tocam o mesmo código
+     (`movement_create`, `services.register_movement()`), para servir
+     de rede de segurança contra regressão antes da mudança.
 
 2. ~~**Soft delete vs. exclusão física de produto**~~ — **Resolvido
    (2026-08-19): soft delete**, via campo `Product.active` (ver Seção 8).
