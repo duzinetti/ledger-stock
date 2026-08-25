@@ -146,6 +146,12 @@ def movement_create(request, product_id):
                     'Produto inativo e sem estoque - não é possível registrar movimentação.'
                 )
                 return redirect('product_detail', product_id=product.id)
+            except Product.DoesNotExist:
+                messages.error(
+                    request,
+                    'Este produto não existe mais - não foi possível registrar a movimentação.'
+                )
+                return redirect('product_list')
 
             messages.success(request, 'Movimentação registrada.')
             return redirect('product_detail', product_id=product.id)

@@ -16,6 +16,8 @@ from .services import (
     InvalidQuantityError,
 )
 
+from unittest.mock import patch
+
 
 class CurrentQuantityTestCase(TestCase):
     def setUp(self):
@@ -313,3 +315,27 @@ class StockMovementAdminPermissionsTestCase(TestCase):
     def test_list_view_is_still_accessible(self):
         response = self.client.get('/admin/inventory/stockmovement/')
         self.assertEqual(response.status_code, 200)
+
+
+class MovementCreateRaceConditionTestCase(TestCase):
+    """Covers #22: Product.DoesNotExist inside register_movement() must not surface as an unhandled 500."""
+
+    def setUp(self):
+        self.product = Product.objects.create(
+            name='M6 Screw', price=0.50, minimum_quantity=10
+        )
+        self.user = User.objects.create_user(username='juliana', password='senha-teste-123')
+        self.client.force_login(self.user)
+
+    def test_product_deleted_between_view_lookup_and_service_call(self):
+        url = reverse('movement_create', args=[self.product.id])
+        post_data = {'type': 'IN', 'quantity': 5, 'reason': 'Reposição'}
+
+        with patch('inventory.views.register_movement_service', side_effect=Product.DoesNotExist):
+            response = self.client.post(url, post_data, follow=True)
+
+        self.assertRedirects(response, reverse('product_list'))
+        self.assertContains(
+            response,
+            'Este produto não existe mais - não foi possível registrar a movimentação.'
+        )
