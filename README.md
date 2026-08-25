@@ -73,12 +73,12 @@ python manage.py test
 - [PRD.md](PRD.md) — problem statement, personas, MVP/V2/Later scope, open product questions
 - [ROADMAP.md](ROADMAP.md) — technical roadmap, what's shipped, what's left
 
-## Open Architectural Decisions
+## Architectural Decisions
 
 Two decisions from [PRD.md §10](PRD.md) are called out explicitly rather than glossed over:
 
-- **Multi-tenancy** — still open. Whether the system should eventually support multiple businesses on one instance determines whether an `empresa_id` FK needs to enter the schema now, before any real data exists, or later as deliberate migration debt.
-- **Soft delete vs. hard delete** — resolved. Products are soft-deleted (`active=False`) rather than physically removed, so movement history is never orphaned.
+- **Multi-tenancy** — resolved (2026-08-21): multi-tenant from the start, not deferred. A new `Company` model owns `Product.company` (the sole FK carrier; `StockMovement` reaches the company via `movement.product.company`, not a duplicated FK), a `Membership` model links `User` to `Company` without swapping `AUTH_USER_MODEL`, object-level access checks are mandatory on every lookup (not just listings), roles (Gestor/Operador) use Django's built-in `Group`, and the Django admin becomes dev/superuser-only. Implementation is sequenced after the audit-priority-0 fixes that touch the same code, as a regression safety net.
+- **Soft delete vs. hard delete** — resolved (2026-08-19). Products are soft-deleted (`active=False`) rather than physically removed, so movement history is never orphaned.
 
 ## Development Process
 
