@@ -1,7 +1,7 @@
 from django.contrib.auth.models import User
 from django.db import connection, transaction
 from django.db.utils import IntegrityError
-from django.test import TestCase
+from django.test import TestCase, TransactionTestCase, skipUnlessDBFeature
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.db.models import ProtectedError
@@ -17,6 +17,7 @@ from .services import (
 )
 
 from unittest.mock import patch
+import threading
 
 
 class CurrentQuantityTestCase(TestCase):
@@ -358,3 +359,41 @@ class ProductConstraintsTestCase(TestCase):
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
                 Product.objects.create(name='X', price=10, minimum_quantity=-1)
+
+
+class ConcurrentStockMovementTestCase(TransactionTestCase):
+    """Covers #24: proves (or would prove) that select_for_update() actually prevents overselling under real concurrent writes - not exercised on SQLite, where the feature is a documented no-op (see docstring in services.register_movement())."""
+
+    def setUp(self):
+        self.product = Product.objects.create(
+            name='M6 Screw', price=0.50, minimum_quantity=10
+        )
+        StockMovement.objects.create(product=self.product, type='IN', quantity=20)
+
+    @skipUnlessDBFeature('has_select_for_update')
+    def test_concurrent_out_movements_do_not_oversell_stock(self):
+        barrier = threading.Barrier(2)
+        errors = []
+
+        def worker():
+            barrier.wait()
+            try:
+                register_movement(
+                    self.product.id,
+                    movement_type='OUT',
+                    quantity=15,
+                )
+            except InsufficientStockError:
+                pass  # esperado para UMA das duas threads, se a trava funcionar
+            except Exception as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=worker) for _ in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        self.assertEqual(errors, [])
+        self.product.refresh_from_db()
+        self.assertGreaterEqual(self.product.current_quantity, 0)

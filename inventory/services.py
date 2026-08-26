@@ -67,6 +67,13 @@ def register_movement(product_id, movement_type, quantity, reason='', user=None)
     and both passing the stock-out validation - which would produce
     negative stock (a classic race condition in systems with
     concurrent access).
+
+    Caveat: select_for_update() is a documented no-op on SQLite (the
+    dev database) - it silently degrades to a plain SELECT with no
+    row lock. This function's core safety guarantee is only real on
+    a backend that supports row locking (Postgres, MySQL - see
+    ConcurrentStockMovementTestCase, gated on
+    connection.features.has_select_for_update).
     """
     if quantity <= 0: 
         raise InvalidQuantityError(
