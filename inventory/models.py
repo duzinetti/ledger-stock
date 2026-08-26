@@ -45,6 +45,16 @@ class Product(models.Model):
             models.Index(fields=['name']),
             models.Index(fields=['category']),
         ]
+        constraints = [
+            models.CheckConstraint(
+                check=models.Q(price__gt=0),
+                name='product_price_gt_zero',  
+            ),
+            models.CheckConstraint(
+                check=models.Q(minimum_quantity__gte=0),
+                name='product_quantity_positive'
+            )
+        ]
 
     def __str__(self):
         """Human-readable label used in admin lists and shell debugging."""

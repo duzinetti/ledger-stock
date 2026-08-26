@@ -339,3 +339,22 @@ class MovementCreateRaceConditionTestCase(TestCase):
             response,
             'Este produto não existe mais - não foi possível registrar a movimentação.'
         )
+
+
+class ProductConstraintsTestCase(TestCase):
+    """Covers the DB-level backstop for Product, bypassing ProductForm entirely (e.g. shell, admin, future API)."""
+
+    def test_non_positive_price_is_rejected_at_db_level(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Product.objects.create(name='X', price=0, minimum_quantity=5)
+
+    def test_negative_price_is_rejected_at_db_level(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Product.objects.create(name='X', price=-10, minimum_quantity=5)
+
+    def test_negative_minimum_quantity_is_rejected_at_db_level(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Product.objects.create(name='X', price=10, minimum_quantity=-1)

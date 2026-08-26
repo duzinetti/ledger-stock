@@ -1,5 +1,6 @@
 from django.contrib import admin
 from .models import Product, StockMovement
+from .forms import ProductForm
 
 
 # Exposes Product in /admin so the owner (Marcos, PRD persona) can
@@ -7,6 +8,7 @@ from .models import Product, StockMovement
 # there is no MVP requirement for an admin-facing UI beyond Django's.
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
+    form = ProductForm
     list_display = ('name', 'category', 'price', 'current_quantity', 'minimum_quantity', 'low_stock', 'active')
     list_filter = ('active',)
     search_fields = ('name', 'category')
