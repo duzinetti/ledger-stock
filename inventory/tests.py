@@ -397,3 +397,64 @@ class ConcurrentStockMovementTestCase(TransactionTestCase):
         self.assertEqual(errors, [])
         self.product.refresh_from_db()
         self.assertGreaterEqual(self.product.current_quantity, 0)
+
+
+class MovementCreateViewTestCase(TestCase):
+    """Covers #25: movement_create had zero test coverage via HTTP."""
+
+    def setUp(self):
+        self.product = Product.objects.create(
+            name='M6 screw', price=0.50, minimum_quantity=10
+        )
+        StockMovement.objects.create(product=self.product, type='IN', quantity=20) 
+        self.user = User.objects.create_user(username='juliana', password='senha-teste-123')
+        self.client.force_login(self.user)
+        self.url = reverse('movement_create', args=[self.product.id])
+
+    def test_get_renders_the_form(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+
+    def test_valid_in_movement_creates_stock_movement_and_redirects(self):
+        response = self.client.post(self.url, {
+            'type': 'IN', 'quantity': 5, 'reason': 'Reposição',
+        })
+
+        self.assertEqual(self.product.movements.count(), 2)  # 1 do setUp + 1 do POST
+        self.assertRedirects(
+            response, reverse('product_detail', args=[self.product.id])
+        )
+
+    def test_valid_out_movement_within_stock_creates_stock_movement(self):
+        response = self.client.post(self.url, {
+            'type': 'OUT', 'quantity': 20, 'reason': 'Retirada'
+        })
+
+        self.assertEqual(self.product.movements.count(), 2)
+        self.assertRedirects(
+            response, reverse('product_detail', args=[self.product.id])
+        )
+
+    def test_invalid_form_data_does_not_create_movement(self):
+        response = self.client.post(self.url, {
+            'type': 'IN', 'quantity': 0, 'reason': '',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.product.movements.count(), 1)
+
+    def test_insufficient_stock_shows_error_and_redirects_to_detail(self):
+        response = self.client.post(self.url, {
+            'type': 'OUT', 'quantity': 999, 'reason': '',
+        }, follow=True)
+
+        self.assertRedirects(
+            response, reverse('product_detail', args=[self.product.id])
+        )
+        self.assertContains(response, 'Quantidade de saída maior que o estoque disponível')
+        self.assertEqual(self.product.movements.count(), 1)
+
+    def test_anonymous_request_is_redirected_to_login(self):
+        self.client.logout()
+        response = self.client.get(self.url)
+        self.assertRedirects(response, f"{reverse('login')}?next={self.url}")
