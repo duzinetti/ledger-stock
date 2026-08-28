@@ -2,7 +2,7 @@
 
 **Autor:** Eduardo Zinetti (Dudu) | **Documento preparado como exercício de Product Management**
 **Status:** Draft v1
-**Última atualização:** 2026-08-21
+**Última atualização:** 2026-08-28
 
 ---
 
@@ -440,8 +440,35 @@ sistema está resolvendo a dor real (confiabilidade do número).
    "polir a experiência de 1 usuário" vs. "construir para escalar
    comercialmente" desde já.
 
-6. **Existe orçamento para infraestrutura paga (banco gerenciado,
-   hosting)?** O roadmap técnico assume free-tier no MVP; isso é
-   adequado para validar o produto, mas free-tier tem limites de
-   uptime/performance que podem contradizer a métrica de
-   confiabilidade da Seção 9 se o uso real crescer.
+6. ~~**Existe orçamento para infraestrutura paga (banco gerenciado,
+   hosting)?**~~ — **Resolvido (2026-08-28): não agora, sim se
+   crescer.** Justificativa: os dois pilotos são negócios reais (loja
+   de cosméticos e loja de materiais de construção), mas o projeto
+   pode crescer além deles — a arquitetura não pode travar numa
+   decisão que só funciona em escala zero, mas também não faz sentido
+   pagar antes de validar.
+
+   Decisão de infraestrutura:
+   - Deploy no Render (tier gratuito no MVP/piloto — sem custo, sem
+     cartão de crédito).
+   - Banco de produção: PostgreSQL via **Neon** (não o Postgres
+     gratuito do próprio Render, que se autodeleta 30+14 dias após a
+     criação - risco real de perder o histórico de movimentação das
+     duas lojas piloto). Neon não exige cartão e não apaga o projeto
+     por inatividade (compute pausa, dado permanece); limite real é
+     0,5GB de armazenamento no tier gratuito.
+   - Migração para tiers pagos (Render web service always-on ~$7/mês
+     + Neon além do tier gratuito) é troca de plano, não reescrita de
+     arquitetura, quando/se o uso real justificar - não há decisão a
+     tomar agora, só quando o gatilho aparecer.
+   - App continua sendo web (não desktop) - decisão confirmada junto
+     com esta, depois de considerar e descartar a alternativa desktop:
+     o valor real de multi-tenancy (duas empresas isoladas no mesmo
+     sistema) só existe com backend compartilhado; um app desktop
+     instalado por máquina esvaziaria o trabalho de `Empresa`/
+     `Membership` já decidido no item 1, e "adicionar multi-tenancy
+     depois" não é incremental nesse cenário - seria recomeçar a
+     camada de dado/autenticação/deploy do zero. "Parecer um app
+     instalado" é resolvido depois via PWA (`manifest.json` + service
+     worker) sem abrir mão do backend compartilhado - item V2, não
+     bloqueia MVP.
