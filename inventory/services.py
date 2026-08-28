@@ -8,7 +8,7 @@ behavior, without duplicating validation.
 """
 from django.db import transaction
 
-from .models import Product, StockMovement
+from .models import MovementType, Product, StockMovement
 
 
 class InsufficientStockError(Exception):
@@ -80,7 +80,7 @@ def register_movement(product_id, movement_type, quantity, reason='', user=None)
             quantity
         )
     
-    if movement_type not in (StockMovement.IN, StockMovement.OUT):
+    if movement_type not in (MovementType.IN, MovementType.OUT):
         raise InvalidMovementTypeError(
             movement_type
         )
@@ -91,7 +91,7 @@ def register_movement(product_id, movement_type, quantity, reason='', user=None)
         if not product.active and product.current_quantity <= 0:
             raise InactiveProductError(product)
 
-        if movement_type == StockMovement.OUT and quantity > product.current_quantity:
+        if movement_type == MovementType.OUT and quantity > product.current_quantity:
             raise InsufficientStockError(
                 product, quantity, product.current_quantity
             )

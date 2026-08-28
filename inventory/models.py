@@ -4,6 +4,11 @@ from django.db import models
 from django.db.models import Sum, Case, When, IntegerField, F
 
 
+class MovementType(models.TextChoices):
+    IN = 'IN', 'Entrada'
+    OUT = 'OUT', 'Saída'
+
+
 class ProductQuerySet(models.QuerySet):
     def with_current_quantity(self):
         """Annotates each product with its current stock quantity in a
@@ -14,8 +19,8 @@ class ProductQuerySet(models.QuerySet):
         return self.annotate(
             current_qty=Sum(
                 Case(
-                    When(movements__type=StockMovement.IN, then='movements__quantity'),
-                    When(movements__type=StockMovement.OUT, then=-1 * F('movements__quantity')),
+                    When(movements__type=MovementType.IN, then='movements__quantity'),
+                    When(movements__type=MovementType.OUT, then=-1 * F('movements__quantity')),
                     default=0,
                     output_field=IntegerField(),
                 )
@@ -72,8 +77,8 @@ class Product(models.Model):
         result = self.movements.aggregate(
             total=Sum(
                 Case(
-                    When(type=StockMovement.IN, then='quantity'),
-                    When(type=StockMovement.OUT, then=-1 * F('quantity')),
+                    When(type=MovementType.IN, then='quantity'),
+                    When(type=MovementType.OUT, then=-1 * F('quantity')),
                     output_field=IntegerField(),
                 )
             )
@@ -91,17 +96,10 @@ class Product(models.Model):
 
 
 class StockMovement(models.Model):
-    IN = 'IN'
-    OUT = 'OUT'
-    TYPE_CHOICES = [
-        (IN, 'In'),
-        (OUT, 'Out'),
-    ]
-
     product = models.ForeignKey(
         Product, on_delete=models.PROTECT, related_name='movements'
     )
-    type = models.CharField(max_length=3, choices=TYPE_CHOICES)
+    type = models.CharField(max_length=3, choices=MovementType.choices)
     quantity = models.IntegerField(validators=[MinValueValidator(1)])
     date = models.DateTimeField(auto_now_add=True)
     reason = models.CharField(max_length=200, blank=True)
@@ -128,7 +126,7 @@ class StockMovement(models.Model):
                 name='stockmovement_quantity_positive',
             ),
             models.CheckConstraint(
-                check=models.Q(type__in=['IN', 'OUT']),
+                check=models.Q(type__in=MovementType.values),
                 name='stockmovement_type_valid',
             ),
         ]
