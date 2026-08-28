@@ -458,3 +458,21 @@ class MovementCreateViewTestCase(TestCase):
         self.client.logout()
         response = self.client.get(self.url)
         self.assertRedirects(response, f"{reverse('login')}?next={self.url}")
+
+    def test_invalid_quantity_error_shows_error_and_redirects_to_detail(self):
+        with patch('inventory.views.register_movement_service', side_effect=InvalidQuantityError(-5)):
+            response = self.client.post(self.url, {
+                'type': 'IN', 'quantity': 5, 'reason': '',
+            }, follow=True)
+
+        self.assertRedirects(response, reverse('product_detail', args=[self.product.id]))
+        self.assertContains(response, 'Quantidade inválida')
+
+    def test_invalid_movement_type_error_shows_error_and_redirects_to_detail(self):
+        with patch('inventory.views.register_movement_service', side_effect=InvalidMovementTypeError('XX')):
+            response = self.client.post(self.url, {
+                'type': 'IN', 'quantity': 5, 'reason': '',
+            }, follow=True)
+
+        self.assertRedirects(response, reverse('product_detail', args=[self.product.id]))
+        self.assertContains(response, 'Tipo de movimentação inválido')

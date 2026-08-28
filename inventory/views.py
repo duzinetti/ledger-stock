@@ -5,7 +5,12 @@ from django.contrib import messages
 from .forms import MovementForm, ProductForm
 from .models import Product, StockMovement
 from .services import register_movement as register_movement_service
-from .services import InsufficientStockError, InactiveProductError
+from .services import (
+    InsufficientStockError, 
+    InactiveProductError,
+    InvalidQuantityError,
+    InvalidMovementTypeError
+)
 
 
 @login_required
@@ -152,6 +157,18 @@ def movement_create(request, product_id):
                     'Este produto não existe mais - não foi possível registrar a movimentação.'
                 )
                 return redirect('product_list')
+            except InvalidQuantityError:
+                messages.error(
+                    request,
+                    'Quantidade inválida - deve ser um número inteiro maior que zero.'
+                )
+                return redirect('product_detail', product_id=product.id)
+            except InvalidMovementTypeError:
+                messages.error(
+                    request,
+                    'Tipo de movimentação inválido.'
+                )
+                return redirect('product_detail', product_id=product.id)
 
             messages.success(request, 'Movimentação registrada.')
             return redirect('product_detail', product_id=product.id)
