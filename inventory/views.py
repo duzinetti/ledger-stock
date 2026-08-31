@@ -5,7 +5,12 @@ from django.contrib import messages
 from .forms import MovementForm, ProductForm
 from .models import Product, StockMovement
 from .services import register_movement as register_movement_service
-from .services import InsufficientStockError, InactiveProductError
+from .services import (
+    InsufficientStockError, 
+    InactiveProductError,
+    InvalidQuantityError,
+    InvalidMovementTypeError
+)
 
 
 @login_required
@@ -85,9 +90,13 @@ def product_detail(request, product_id):
     # query to fetch the related product (used in __str__ and in the
     # template).
     movements = product.movements.select_related('product').order_by('-date')
+
+    paginator = Paginator(movements, 20)
+    paginated_movements = paginator.get_page(request.GET.get('page'))
+
     return render(request, 'inventory/product_detail.html', {
         'product': product,
-        'movements': movements,
+        'movements': paginated_movements,
     })
 
 
@@ -144,6 +153,24 @@ def movement_create(request, product_id):
                 messages.error(
                     request,
                     'Produto inativo e sem estoque - não é possível registrar movimentação.'
+                )
+                return redirect('product_detail', product_id=product.id)
+            except Product.DoesNotExist:
+                messages.error(
+                    request,
+                    'Este produto não existe mais - não foi possível registrar a movimentação.'
+                )
+                return redirect('product_list')
+            except InvalidQuantityError:
+                messages.error(
+                    request,
+                    'Quantidade inválida - deve ser um número inteiro maior que zero.'
+                )
+                return redirect('product_detail', product_id=product.id)
+            except InvalidMovementTypeError:
+                messages.error(
+                    request,
+                    'Tipo de movimentação inválido.'
                 )
                 return redirect('product_detail', product_id=product.id)
 

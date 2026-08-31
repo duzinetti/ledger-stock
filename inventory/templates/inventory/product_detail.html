@@ -34,4 +34,14 @@
         <tr><td colspan="4">Nenhuma movimentação registrada.</td></tr>
         {% endfor %}
     </table>
+
+    <div>
+        {% if movements.has_previous %}
+            <a href="?page={{ movements.previous_page_number }}">Anterior</a>
+        {% endif %}
+        Página {{ movements.number }} de {{ movements.paginator.num_pages }}
+        {% if movements.has_next %}
+            <a href="?page={{ movements.next_page_number }}">Próxima</a>
+        {% endif %}
+    </div>
 {% endblock %}

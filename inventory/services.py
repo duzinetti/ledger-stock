@@ -8,7 +8,7 @@ behavior, without duplicating validation.
 """
 from django.db import transaction
 
-from .models import Product, StockMovement
+from .models import MovementType, Product, StockMovement
 
 
 class InsufficientStockError(Exception):
@@ -67,13 +67,20 @@ def register_movement(product_id, movement_type, quantity, reason='', user=None)
     and both passing the stock-out validation - which would produce
     negative stock (a classic race condition in systems with
     concurrent access).
+
+    Caveat: select_for_update() is a documented no-op on SQLite (the
+    dev database) - it silently degrades to a plain SELECT with no
+    row lock. This function's core safety guarantee is only real on
+    a backend that supports row locking (Postgres, MySQL - see
+    ConcurrentStockMovementTestCase, gated on
+    connection.features.has_select_for_update).
     """
     if quantity <= 0: 
         raise InvalidQuantityError(
             quantity
         )
     
-    if movement_type not in (StockMovement.IN, StockMovement.OUT):
+    if movement_type not in (MovementType.IN, MovementType.OUT):
         raise InvalidMovementTypeError(
             movement_type
         )
@@ -81,12 +88,14 @@ def register_movement(product_id, movement_type, quantity, reason='', user=None)
     with transaction.atomic():
         product = Product.objects.select_for_update().get(id=product_id)
 
-        if not product.active and product.current_quantity <= 0:
+        current_quantity = product.current_quantity
+
+        if not product.active and current_quantity <= 0:
             raise InactiveProductError(product)
 
-        if movement_type == StockMovement.OUT and quantity > product.current_quantity:
+        if movement_type == MovementType.OUT and quantity > current_quantity:
             raise InsufficientStockError(
-                product, quantity, product.current_quantity
+                product, quantity, current_quantity
             )
 
         movement = StockMovement.objects.create(

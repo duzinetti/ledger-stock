@@ -1,7 +1,7 @@
 from django.contrib.auth.models import User
 from django.db import connection, transaction
 from django.db.utils import IntegrityError
-from django.test import TestCase
+from django.test import TestCase, TransactionTestCase, skipUnlessDBFeature
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.db.models import ProtectedError
@@ -15,6 +15,9 @@ from .services import (
     InvalidMovementTypeError,
     InvalidQuantityError,
 )
+
+from unittest.mock import patch
+import threading
 
 
 class CurrentQuantityTestCase(TestCase):
@@ -31,6 +34,11 @@ class CurrentQuantityTestCase(TestCase):
     def test_low_stock_when_below_minimum(self):
         StockMovement.objects.create(product=self.product, type='IN', quantity=5)
         self.assertTrue(self.product.low_stock)
+
+    def test_with_current_quantity_for_product_with_no_movements(self):
+        annotated = Product.objects.with_current_quantity().get(id=self.product.id)
+        self.assertEqual(annotated.current_qty, 0)
+        self.assertTrue(annotated.is_low_stock)
 
 
 class ListingWithoutNPlusOneTestCase(TestCase):
@@ -53,6 +61,25 @@ class ListingWithoutNPlusOneTestCase(TestCase):
         # of how many products exist.
         self.assertEqual(len(ctx.captured_queries), 1)
 
+    def test_admin_changelist_does_not_reintroduce_n_plus_one(self):
+        """Covers #28: ProductAdmin.list_display used to call the
+        current_quantity/low_stock properties, each firing a fresh
+        aggregation query per row."""
+        superuser = User.objects.create_superuser(
+            username='admin', password='senha-teste-123', email='admin@example.com'
+        )
+        self.client.force_login(superuser)
+
+        with CaptureQueriesContext(connection) as ctx:
+            response = self.client.get('/admin/inventory/product/')
+
+        self.assertEqual(response.status_code, 200)
+        # A handful of admin bookkeeping queries (session, permissions,
+        # count) are expected - the point is this doesn't scale with
+        # the number of products (5 here). A regression back to the
+        # properties would add ~2 extra queries per row.
+        self.assertLess(len(ctx.captured_queries), 10)
+
 
 class RegisterMovementServiceTestCase(TestCase):
     def setUp(self):
@@ -71,6 +98,17 @@ class RegisterMovementServiceTestCase(TestCase):
             register_movement(self.product.id, movement_type='OUT', quantity=999)
 
         # No movement should be created when validation fails.
+        self.assertEqual(self.product.movements.count(), 1)
+
+    def test_out_movement_exactly_equal_to_stock_is_allowed(self):
+        register_movement(self.product.id, movement_type='OUT', quantity=20)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.current_quantity, 0)
+
+    def test_zero_quantity_is_rejected_at_service_layer(self):
+        with self.assertRaises(InvalidQuantityError):
+            register_movement(self.product.id, movement_type='IN', quantity=0)
+
         self.assertEqual(self.product.movements.count(), 1)
 
     def test_invalid_quantity_is_rejected(self):
@@ -313,3 +351,163 @@ class StockMovementAdminPermissionsTestCase(TestCase):
     def test_list_view_is_still_accessible(self):
         response = self.client.get('/admin/inventory/stockmovement/')
         self.assertEqual(response.status_code, 200)
+
+
+class MovementCreateRaceConditionTestCase(TestCase):
+    """Covers #22: Product.DoesNotExist inside register_movement() must not surface as an unhandled 500."""
+
+    def setUp(self):
+        self.product = Product.objects.create(
+            name='M6 Screw', price=0.50, minimum_quantity=10
+        )
+        self.user = User.objects.create_user(username='juliana', password='senha-teste-123')
+        self.client.force_login(self.user)
+
+    def test_product_deleted_between_view_lookup_and_service_call(self):
+        url = reverse('movement_create', args=[self.product.id])
+        post_data = {'type': 'IN', 'quantity': 5, 'reason': 'Reposição'}
+
+        with patch('inventory.views.register_movement_service', side_effect=Product.DoesNotExist):
+            response = self.client.post(url, post_data, follow=True)
+
+        self.assertRedirects(response, reverse('product_list'))
+        self.assertContains(
+            response,
+            'Este produto não existe mais - não foi possível registrar a movimentação.'
+        )
+
+
+class ProductConstraintsTestCase(TestCase):
+    """Covers the DB-level backstop for Product, bypassing ProductForm entirely (e.g. shell, admin, future API)."""
+
+    def test_non_positive_price_is_rejected_at_db_level(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Product.objects.create(name='X', price=0, minimum_quantity=5)
+
+    def test_negative_price_is_rejected_at_db_level(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Product.objects.create(name='X', price=-10, minimum_quantity=5)
+
+    def test_negative_minimum_quantity_is_rejected_at_db_level(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Product.objects.create(name='X', price=10, minimum_quantity=-1)
+
+
+class ConcurrentStockMovementTestCase(TransactionTestCase):
+    """Covers #24: proves (or would prove) that select_for_update() actually prevents overselling under real concurrent writes - not exercised on SQLite, where the feature is a documented no-op (see docstring in services.register_movement())."""
+
+    def setUp(self):
+        self.product = Product.objects.create(
+            name='M6 Screw', price=0.50, minimum_quantity=10
+        )
+        StockMovement.objects.create(product=self.product, type='IN', quantity=20)
+
+    @skipUnlessDBFeature('has_select_for_update')
+    def test_concurrent_out_movements_do_not_oversell_stock(self):
+        barrier = threading.Barrier(2)
+        errors = []
+
+        def worker():
+            barrier.wait()
+            try:
+                register_movement(
+                    self.product.id,
+                    movement_type='OUT',
+                    quantity=15,
+                )
+            except InsufficientStockError:
+                pass  # esperado para UMA das duas threads, se a trava funcionar
+            except Exception as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=worker) for _ in range(2)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        self.assertEqual(errors, [])
+        self.product.refresh_from_db()
+        self.assertGreaterEqual(self.product.current_quantity, 0)
+
+
+class MovementCreateViewTestCase(TestCase):
+    """Covers #25: movement_create had zero test coverage via HTTP."""
+
+    def setUp(self):
+        self.product = Product.objects.create(
+            name='M6 screw', price=0.50, minimum_quantity=10
+        )
+        StockMovement.objects.create(product=self.product, type='IN', quantity=20) 
+        self.user = User.objects.create_user(username='juliana', password='senha-teste-123')
+        self.client.force_login(self.user)
+        self.url = reverse('movement_create', args=[self.product.id])
+
+    def test_get_renders_the_form(self):
+        response = self.client.get(self.url)
+        self.assertEqual(response.status_code, 200)
+
+    def test_valid_in_movement_creates_stock_movement_and_redirects(self):
+        response = self.client.post(self.url, {
+            'type': 'IN', 'quantity': 5, 'reason': 'Reposição',
+        })
+
+        self.assertEqual(self.product.movements.count(), 2)  # 1 do setUp + 1 do POST
+        self.assertRedirects(
+            response, reverse('product_detail', args=[self.product.id])
+        )
+
+    def test_valid_out_movement_within_stock_creates_stock_movement(self):
+        response = self.client.post(self.url, {
+            'type': 'OUT', 'quantity': 20, 'reason': 'Retirada'
+        })
+
+        self.assertEqual(self.product.movements.count(), 2)
+        self.assertRedirects(
+            response, reverse('product_detail', args=[self.product.id])
+        )
+
+    def test_invalid_form_data_does_not_create_movement(self):
+        response = self.client.post(self.url, {
+            'type': 'IN', 'quantity': 0, 'reason': '',
+        })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.product.movements.count(), 1)
+
+    def test_insufficient_stock_shows_error_and_redirects_to_detail(self):
+        response = self.client.post(self.url, {
+            'type': 'OUT', 'quantity': 999, 'reason': '',
+        }, follow=True)
+
+        self.assertRedirects(
+            response, reverse('product_detail', args=[self.product.id])
+        )
+        self.assertContains(response, 'Quantidade de saída maior que o estoque disponível')
+        self.assertEqual(self.product.movements.count(), 1)
+
+    def test_anonymous_request_is_redirected_to_login(self):
+        self.client.logout()
+        response = self.client.get(self.url)
+        self.assertRedirects(response, f"{reverse('login')}?next={self.url}")
+
+    def test_invalid_quantity_error_shows_error_and_redirects_to_detail(self):
+        with patch('inventory.views.register_movement_service', side_effect=InvalidQuantityError(-5)):
+            response = self.client.post(self.url, {
+                'type': 'IN', 'quantity': 5, 'reason': '',
+            }, follow=True)
+
+        self.assertRedirects(response, reverse('product_detail', args=[self.product.id]))
+        self.assertContains(response, 'Quantidade inválida')
+
+    def test_invalid_movement_type_error_shows_error_and_redirects_to_detail(self):
+        with patch('inventory.views.register_movement_service', side_effect=InvalidMovementTypeError('XX')):
+            response = self.client.post(self.url, {
+                'type': 'IN', 'quantity': 5, 'reason': '',
+            }, follow=True)
+
+        self.assertRedirects(response, reverse('product_detail', args=[self.product.id]))
+        self.assertContains(response, 'Tipo de movimentação inválido')

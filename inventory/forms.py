@@ -8,7 +8,7 @@ produce a clear server-side error, not a crash.
 """
 from django import forms
 
-from .models import Product
+from .models import MovementType, Product
 
 
 class ProductForm(forms.ModelForm):
@@ -49,7 +49,7 @@ class MovementForm(forms.Form):
     same concurrency bug the service exists to prevent.
     """
 
-    TYPE_CHOICES = [('IN', 'Entrada'), ('OUT', 'Saída')]
+    TYPE_CHOICES = MovementType.choices
 
     type = forms.ChoiceField(choices=TYPE_CHOICES, label='Tipo')
     quantity = forms.IntegerField(min_value=1, label='Quantidade')
