@@ -35,6 +35,11 @@ class CurrentQuantityTestCase(TestCase):
         StockMovement.objects.create(product=self.product, type='IN', quantity=5)
         self.assertTrue(self.product.low_stock)
 
+    def test_with_current_quantity_for_product_with_no_movements(self):
+        annotated = Product.objects.with_current_quantity().get(id=self.product.id)
+        self.assertEqual(annotated.current_qty, 0)
+        self.assertTrue(annotated.is_low_stock)
+
 
 class ListingWithoutNPlusOneTestCase(TestCase):
     """Ensures the N+1 fix (architecture review) keeps holding."""
@@ -93,6 +98,17 @@ class RegisterMovementServiceTestCase(TestCase):
             register_movement(self.product.id, movement_type='OUT', quantity=999)
 
         # No movement should be created when validation fails.
+        self.assertEqual(self.product.movements.count(), 1)
+
+    def test_out_movement_exactly_equal_to_stock_is_allowed(self):
+        register_movement(self.product.id, movement_type='OUT', quantity=20)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.current_quantity, 0)
+
+    def test_zero_quantity_is_rejected_at_service_layer(self):
+        with self.assertRaises(InvalidQuantityError):
+            register_movement(self.product.id, movement_type='IN', quantity=0)
+
         self.assertEqual(self.product.movements.count(), 1)
 
     def test_invalid_quantity_is_rejected(self):

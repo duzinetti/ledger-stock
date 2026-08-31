@@ -90,9 +90,13 @@ def product_detail(request, product_id):
     # query to fetch the related product (used in __str__ and in the
     # template).
     movements = product.movements.select_related('product').order_by('-date')
+
+    paginator = Paginator(movements, 20)
+    paginated_movements = paginator.get_page(request.GET.get('page'))
+
     return render(request, 'inventory/product_detail.html', {
         'product': product,
-        'movements': movements,
+        'movements': paginated_movements,
     })
 
 
