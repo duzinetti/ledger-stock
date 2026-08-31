@@ -56,6 +56,25 @@ class ListingWithoutNPlusOneTestCase(TestCase):
         # of how many products exist.
         self.assertEqual(len(ctx.captured_queries), 1)
 
+    def test_admin_changelist_does_not_reintroduce_n_plus_one(self):
+        """Covers #28: ProductAdmin.list_display used to call the
+        current_quantity/low_stock properties, each firing a fresh
+        aggregation query per row."""
+        superuser = User.objects.create_superuser(
+            username='admin', password='senha-teste-123', email='admin@example.com'
+        )
+        self.client.force_login(superuser)
+
+        with CaptureQueriesContext(connection) as ctx:
+            response = self.client.get('/admin/inventory/product/')
+
+        self.assertEqual(response.status_code, 200)
+        # A handful of admin bookkeeping queries (session, permissions,
+        # count) are expected - the point is this doesn't scale with
+        # the number of products (5 here). A regression back to the
+        # properties would add ~2 extra queries per row.
+        self.assertLess(len(ctx.captured_queries), 10)
+
 
 class RegisterMovementServiceTestCase(TestCase):
     def setUp(self):

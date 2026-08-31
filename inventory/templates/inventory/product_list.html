@@ -25,7 +25,7 @@
             <td>{{ product.name }}</td>
             <td>{{ product.category }}</td>
             <td>{{ product.price }}</td>
-            <td>{{ product.current_qty|default:0 }}{% if product.current_qty|default:0 < product.minimum_quantity %} (baixo){% endif %}</td>
+            <td>{{ product.current_qty }}{% if product.is_low_stock %} (baixo){% endif %}</td>
             <td>{{ product.minimum_quantity }}</td>
             <td>
                 <a href="{% url 'product_detail' product.id %}">Ver</a>

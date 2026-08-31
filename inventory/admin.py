@@ -9,7 +9,20 @@ from .forms import ProductForm
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
     form = ProductForm
-    list_display = ('name', 'category', 'price', 'current_quantity', 'minimum_quantity', 'low_stock', 'active')
+
+    def get_queryset(self, request):
+            qs = super().get_queryset(request)
+            return qs.with_current_quantity()
+
+    @admin.display(description='Quantidade')
+    def current_quantity_display(self, obj):
+         return obj.current_qty
+
+    @admin.display(description='Estoque baixo', boolean=True)
+    def low_stock_display(self, obj):
+        return obj.is_low_stock
+
+    list_display = ('name', 'category', 'price', 'current_quantity_display', 'minimum_quantity', 'low_stock_display', 'active')
     list_filter = ('active',)
     search_fields = ('name', 'category')
 

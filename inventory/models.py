@@ -1,7 +1,8 @@
 from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
-from django.db.models import Sum, Case, When, IntegerField, F
+from django.db.models import Sum, Case, When, IntegerField, BooleanField, F
+from django.db.models.functions import Coalesce
 
 
 class MovementType(models.TextChoices):
@@ -17,13 +18,22 @@ class ProductQuerySet(models.QuerySet):
         `current_quantity` property is used inside a loop/listing).
         """
         return self.annotate(
-            current_qty=Sum(
-                Case(
-                    When(movements__type=MovementType.IN, then='movements__quantity'),
-                    When(movements__type=MovementType.OUT, then=-1 * F('movements__quantity')),
-                    default=0,
-                    output_field=IntegerField(),
-                )
+            current_qty=Coalesce(
+                Sum(
+                    Case(
+                        When(movements__type=MovementType.IN, then='movements__quantity'),
+                        When(movements__type=MovementType.OUT, then=-1 * F('movements__quantity')),
+                        default=0,
+                        output_field=IntegerField(),
+                    )
+                ),
+                0,
+            )
+        ).annotate(
+            is_low_stock=Case(
+                When(current_qty__lt=F('minimum_quantity'), then=True),
+                default=False,
+                output_field=BooleanField(),
             )
         )
 

@@ -88,12 +88,14 @@ def register_movement(product_id, movement_type, quantity, reason='', user=None)
     with transaction.atomic():
         product = Product.objects.select_for_update().get(id=product_id)
 
-        if not product.active and product.current_quantity <= 0:
+        current_quantity = product.current_quantity
+
+        if not product.active and current_quantity <= 0:
             raise InactiveProductError(product)
 
-        if movement_type == MovementType.OUT and quantity > product.current_quantity:
+        if movement_type == MovementType.OUT and quantity > current_quantity:
             raise InsufficientStockError(
-                product, quantity, product.current_quantity
+                product, quantity, current_quantity
             )
 
         movement = StockMovement.objects.create(
