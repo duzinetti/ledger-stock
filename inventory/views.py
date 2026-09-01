@@ -27,7 +27,9 @@ def product_list(request):
     # SINGLE query, instead of firing an aggregation query per
     # product (N+1) as would happen using the `current_quantity`
     # property inside the template loop.
-    products = Product.objects.active().with_current_quantity().order_by('name')
+    products = Product.objects.active().with_current_quantity().filter(
+        company=request.user.membership.company
+    ).order_by('name')
     if search_term:
         products = products.filter(name__icontains=search_term)
 
@@ -65,7 +67,7 @@ def product_update(request, product_id):
 
     Login-gated per PRD §6.4 (write action).
     """
-    product = get_object_or_404(Product, id=product_id)
+    product = get_object_or_404(Product, id=product_id, company=request.user.membership.company)
 
     if request.method == 'POST':
         form = ProductForm(request.POST, instance=product)
@@ -86,7 +88,7 @@ def product_detail(request, product_id):
     Login-gated along with the rest of the app per product-owner
     decision (see product_list docstring).
     """
-    product = get_object_or_404(Product, id=product_id)
+    product = get_object_or_404(Product, id=product_id, company=request.user.membership.company)
     # select_related('product') avoids N+1 when rendering the
     # history: without it, each listed movement would fire an extra
     # query to fetch the related product (used in __str__ and in the
@@ -111,7 +113,7 @@ def product_delete(request, product_id):
     soft-delete open question from PRD §8/§10.2. Login-gated per
     PRD §6.4.
     """
-    product = get_object_or_404(Product, id=product_id)
+    product = get_object_or_404(Product, id=product_id, company=request.user.membership.company)
 
     if request.method == 'POST':
         name = product.name
@@ -131,7 +133,7 @@ def movement_create(request, product_id):
     logic to services.register_movement so this view and any future
     API share one source of truth for the concurrency-safety rule.
     """
-    product = get_object_or_404(Product, id=product_id)
+    product = get_object_or_404(Product, id=product_id, company=request.user.membership.company)
 
     if request.method == 'POST':
         form = MovementForm(request.POST)

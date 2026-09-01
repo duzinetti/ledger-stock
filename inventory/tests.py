@@ -156,6 +156,7 @@ class LoginRequiredTestCase(TestCase):
             company=self.company, name='M6 Screw', price=0.50, minimum_quantity=10
         )
         self.user = User.objects.create_user(username='juliana', password='senha-teste-123')
+        Membership.objects.create(user=self.user, company=self.company)
 
     def test_anonymous_request_is_redirected_to_login(self):
         response = self.client.get(reverse('product_list'))
@@ -278,6 +279,7 @@ class ProductSoftDeleteTestCase(TestCase):
         )
         StockMovement.objects.create(product=self.product, type='IN', quantity=10)
         self.user = User.objects.create_user(username='juliana', password='senha-teste-123')
+        Membership.objects.create(user=self.user, company=self.company)
         self.client.force_login(self.user)
 
     def test_delete_view_deactivates_instead_of_removing_the_row(self):
@@ -394,6 +396,7 @@ class MovementCreateRaceConditionTestCase(TestCase):
             company=self.company, name='M6 Screw', price=0.50, minimum_quantity=10
         )
         self.user = User.objects.create_user(username='juliana', password='senha-teste-123')
+        Membership.objects.create(user=self.user, company=self.company)
         self.client.force_login(self.user)
 
     def test_product_deleted_between_view_lookup_and_service_call(self):
@@ -481,6 +484,7 @@ class MovementCreateViewTestCase(TestCase):
         )
         StockMovement.objects.create(product=self.product, type='IN', quantity=20)
         self.user = User.objects.create_user(username='juliana', password='senha-teste-123')
+        Membership.objects.create(user=self.user, company=self.company)
         self.client.force_login(self.user)
         self.url = reverse('movement_create', args=[self.product.id])
 
@@ -549,3 +553,58 @@ class MovementCreateViewTestCase(TestCase):
 
         self.assertRedirects(response, reverse('product_detail', args=[self.product.id]))
         self.assertContains(response, 'Tipo de movimentação inválido')
+
+
+class CrossCompanyIsolationTestCase(TestCase):
+    """Covers #44: a user from Company A must not reach Company B's
+    product through any object-specific lookup, not just be filtered
+    out of listings - including by typing the URL directly (IDOR).
+    Every case expects 404, not 403: 403 would confirm the id exists,
+    404 treats "wrong company" identically to "never existed".
+    """
+
+    def setUp(self):
+        self.company_a = Company.objects.create(name='Empresa A')
+        self.company_b = Company.objects.create(name='Empresa B')
+
+        self.user_a = User.objects.create_user(username='dono_a', password='senha-teste-123')
+        Membership.objects.create(user=self.user_a, company=self.company_a)
+        self.client.force_login(self.user_a)
+
+        self.product_b = Product.objects.create(
+            company=self.company_b, name='Produto da Empresa B', price=10, minimum_quantity=1
+        )
+        StockMovement.objects.create(product=self.product_b, type='IN', quantity=5)
+
+    def test_product_detail_of_other_company_is_404(self):
+        response = self.client.get(reverse('product_detail', args=[self.product_b.id]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_product_update_of_other_company_is_404(self):
+        response = self.client.get(reverse('product_update', args=[self.product_b.id]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_product_delete_of_other_company_is_404(self):
+        response = self.client.get(reverse('product_delete', args=[self.product_b.id]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_product_delete_post_of_other_company_is_404_and_does_not_deactivate(self):
+        response = self.client.post(reverse('product_delete', args=[self.product_b.id]))
+        self.assertEqual(response.status_code, 404)
+        self.product_b.refresh_from_db()
+        self.assertTrue(self.product_b.active)
+
+    def test_movement_create_of_other_company_is_404(self):
+        response = self.client.get(reverse('movement_create', args=[self.product_b.id]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_movement_create_post_of_other_company_is_404_and_creates_no_movement(self):
+        response = self.client.post(reverse('movement_create', args=[self.product_b.id]), {
+            'type': 'IN', 'quantity': 5, 'reason': '',
+        })
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(self.product_b.movements.count(), 1)  # only the one from setUp
+
+    def test_product_list_does_not_show_other_companys_products(self):
+        response = self.client.get(reverse('product_list'))
+        self.assertNotContains(response, 'Produto da Empresa B')
