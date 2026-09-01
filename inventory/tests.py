@@ -7,7 +7,7 @@ from django.urls import reverse
 from django.db.models import ProtectedError
 
 from .forms import MovementForm, ProductForm
-from .models import Product, StockMovement
+from .models import Company, Membership, Product, StockMovement
 from .services import (
     register_movement,
     InactiveProductError,
@@ -22,8 +22,9 @@ import threading
 
 class CurrentQuantityTestCase(TestCase):
     def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
         self.product = Product.objects.create(
-            name='M6 Screw', price=0.50, minimum_quantity=10
+            company=self.company, name='M6 Screw', price=0.50, minimum_quantity=10
         )
 
     def test_current_quantity_sums_in_and_out_movements(self):
@@ -45,9 +46,10 @@ class ListingWithoutNPlusOneTestCase(TestCase):
     """Ensures the N+1 fix (architecture review) keeps holding."""
 
     def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
         for i in range(5):
             product = Product.objects.create(
-                name=f'Product {i}', price=10, minimum_quantity=5
+                company=self.company, name=f'Product {i}', price=10, minimum_quantity=5
             )
             StockMovement.objects.create(product=product, type='IN', quantity=50)
 
@@ -83,8 +85,9 @@ class ListingWithoutNPlusOneTestCase(TestCase):
 
 class RegisterMovementServiceTestCase(TestCase):
     def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
         self.product = Product.objects.create(
-            name='M6 Screw', price=0.50, minimum_quantity=10
+            company=self.company, name='M6 Screw', price=0.50, minimum_quantity=10
         )
         StockMovement.objects.create(product=self.product, type='IN', quantity=20)
 
@@ -136,7 +139,7 @@ class RegisterMovementServiceTestCase(TestCase):
 
     def test_movement_on_inactive_product_without_stock_is_blocked(self):
         empty_product = Product.objects.create(
-            name='Discontinued Widget', price=1, minimum_quantity=0, active=False
+            company=self.company, name='Discontinued Widget', price=1, minimum_quantity=0, active=False
         )
         with self.assertRaises(InactiveProductError):
             register_movement(empty_product.id, movement_type='IN', quantity=5)
@@ -148,8 +151,9 @@ class LoginRequiredTestCase(TestCase):
     """Covers PRD §6.4: every inventory view requires authentication."""
 
     def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
         self.product = Product.objects.create(
-            name='M6 Screw', price=0.50, minimum_quantity=10
+            company=self.company, name='M6 Screw', price=0.50, minimum_quantity=10
         )
         self.user = User.objects.create_user(username='juliana', password='senha-teste-123')
 
@@ -168,6 +172,28 @@ class LoginRequiredTestCase(TestCase):
         url = reverse('product_detail', args=[self.product.id])
         response = self.client.get(url)
         self.assertRedirects(response, f"{reverse('login')}?next={url}")
+
+
+class ProductCreateViewTestCase(TestCase):
+    """Covers a gap found while implementing #17: ProductForm doesn't
+    expose `company` (the logged-in user should never pick it), but
+    nothing was assigning it either - product_create crashed with an
+    IntegrityError on every submission, and no test caught it."""
+
+    def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
+        self.user = User.objects.create_user(username='juliana', password='senha-teste-123')
+        Membership.objects.create(user=self.user, company=self.company)
+        self.client.force_login(self.user)
+
+    def test_valid_post_creates_product_assigned_to_the_users_company(self):
+        response = self.client.post(reverse('product_create'), {
+            'name': 'Parafuso', 'category': '', 'price': '1.50', 'minimum_quantity': 5,
+        })
+
+        self.assertRedirects(response, reverse('product_list'))
+        product = Product.objects.get(name='Parafuso')
+        self.assertEqual(product.company, self.company)
 
 
 class ProductFormTestCase(TestCase):
@@ -218,8 +244,9 @@ class StockMovementConstraintsTestCase(TestCase):
     """
 
     def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
         self.product = Product.objects.create(
-            name='M6 Screw', price=0.50, minimum_quantity=10
+            company=self.company, name='M6 Screw', price=0.50, minimum_quantity=10
         )
 
     def test_non_positive_quantity_is_rejected_at_db_level(self):
@@ -245,8 +272,9 @@ class ProductSoftDeleteTestCase(TestCase):
     """
 
     def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
         self.product = Product.objects.create(
-            name='M6 Screw', price=0.50, minimum_quantity=10
+            company=self.company, name='M6 Screw', price=0.50, minimum_quantity=10
         )
         StockMovement.objects.create(product=self.product, type='IN', quantity=10)
         self.user = User.objects.create_user(username='juliana', password='senha-teste-123')
@@ -285,9 +313,12 @@ class ProductDeletionProtectionTestCase(TestCase):
     ProductSoftDeleteTestCase).
     """
 
+    def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
+
     def test_deleting_a_product_with_movements_is_blocked_at_db_level(self):
         product = Product.objects.create(
-            name='M6 Screw', price=0.50, minimum_quantity=10
+            company=self.company, name='M6 Screw', price=0.50, minimum_quantity=10
         )
         StockMovement.objects.create(product=product, type='IN', quantity=10)
 
@@ -298,7 +329,7 @@ class ProductDeletionProtectionTestCase(TestCase):
 
     def test_deleting_a_product_with_no_movements_is_allowed(self):
         product = Product.objects.create(
-            name='Never Sold Widget', price=1, minimum_quantity=0
+            company=self.company, name='Never Sold Widget', price=1, minimum_quantity=0
         )
 
         product.delete()
@@ -312,11 +343,12 @@ class StockMovementAdminPermissionsTestCase(TestCase):
     """
 
     def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
         self.superuser = User.objects.create_superuser(
             username='admin', password='senha-teste-123', email='admin@example.com'
         )
         self.product = Product.objects.create(
-            name='M6 Screw', price=0.50, minimum_quantity=10
+            company=self.company, name='M6 Screw', price=0.50, minimum_quantity=10
         )
         self.movement = StockMovement.objects.create(
             product=self.product, type='IN', quantity=10
@@ -357,8 +389,9 @@ class MovementCreateRaceConditionTestCase(TestCase):
     """Covers #22: Product.DoesNotExist inside register_movement() must not surface as an unhandled 500."""
 
     def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
         self.product = Product.objects.create(
-            name='M6 Screw', price=0.50, minimum_quantity=10
+            company=self.company, name='M6 Screw', price=0.50, minimum_quantity=10
         )
         self.user = User.objects.create_user(username='juliana', password='senha-teste-123')
         self.client.force_login(self.user)
@@ -380,28 +413,32 @@ class MovementCreateRaceConditionTestCase(TestCase):
 class ProductConstraintsTestCase(TestCase):
     """Covers the DB-level backstop for Product, bypassing ProductForm entirely (e.g. shell, admin, future API)."""
 
+    def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
+
     def test_non_positive_price_is_rejected_at_db_level(self):
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
-                Product.objects.create(name='X', price=0, minimum_quantity=5)
+                Product.objects.create(company=self.company, name='X', price=0, minimum_quantity=5)
 
     def test_negative_price_is_rejected_at_db_level(self):
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
-                Product.objects.create(name='X', price=-10, minimum_quantity=5)
+                Product.objects.create(company=self.company, name='X', price=-10, minimum_quantity=5)
 
     def test_negative_minimum_quantity_is_rejected_at_db_level(self):
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
-                Product.objects.create(name='X', price=10, minimum_quantity=-1)
+                Product.objects.create(company=self.company, name='X', price=10, minimum_quantity=-1)
 
 
 class ConcurrentStockMovementTestCase(TransactionTestCase):
     """Covers #24: proves (or would prove) that select_for_update() actually prevents overselling under real concurrent writes - not exercised on SQLite, where the feature is a documented no-op (see docstring in services.register_movement())."""
 
     def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
         self.product = Product.objects.create(
-            name='M6 Screw', price=0.50, minimum_quantity=10
+            company=self.company, name='M6 Screw', price=0.50, minimum_quantity=10
         )
         StockMovement.objects.create(product=self.product, type='IN', quantity=20)
 
@@ -438,10 +475,11 @@ class MovementCreateViewTestCase(TestCase):
     """Covers #25: movement_create had zero test coverage via HTTP."""
 
     def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
         self.product = Product.objects.create(
-            name='M6 screw', price=0.50, minimum_quantity=10
+            company=self.company, name='M6 screw', price=0.50, minimum_quantity=10
         )
-        StockMovement.objects.create(product=self.product, type='IN', quantity=20) 
+        StockMovement.objects.create(product=self.product, type='IN', quantity=20)
         self.user = User.objects.create_user(username='juliana', password='senha-teste-123')
         self.client.force_login(self.user)
         self.url = reverse('movement_create', args=[self.product.id])

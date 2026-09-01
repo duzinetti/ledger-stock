@@ -45,7 +45,31 @@ class ProductQuerySet(models.QuerySet):
         return self.filter(active=True)
 
 
+class Company(models.Model):
+    name = models.CharField(max_length=100)
+
+    def __str__(self):
+        """Human-readable label used in admin lists and shell debugging."""
+        return self.name
+
+
+class Membership(models.Model):
+    """Links a login to the one company it belongs to - read via
+    request.user.membership.company wherever a view needs to know
+    which company the logged-in user acts on behalf of (#17's
+    minimal slice; full read-side isolation is #44).
+    """
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='membership'
+    )
+    company = models.ForeignKey(Company, on_delete=models.PROTECT, related_name='memberships')
+
+    def __str__(self):
+        return f'{self.user} - {self.company}'
+
+
 class Product(models.Model):
+    company = models.ForeignKey(Company, on_delete=models.PROTECT)
     name = models.CharField(max_length=100)
     category = models.CharField(max_length=50, blank=True)
     price = models.DecimalField(max_digits=10, decimal_places=2)

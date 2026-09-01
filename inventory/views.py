@@ -49,7 +49,9 @@ def product_create(request):
     if request.method == 'POST':
         form = ProductForm(request.POST)
         if form.is_valid():
-            form.save()
+            product = form.save(commit=False)
+            product.company = request.user.membership.company
+            product.save()
             messages.success(request, 'Produto cadastrado com sucesso.')
             return redirect('product_list')
     else:
