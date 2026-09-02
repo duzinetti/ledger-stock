@@ -1,12 +1,22 @@
 from django.contrib import admin
 from .models import Product, StockMovement
 from .forms import ProductForm
+from django.contrib.admin import AdminSite
+from django.contrib.auth.models import User, Group
 
 
 # Exposes Product in /admin so the owner (Marcos, PRD persona) can
 # inspect and fix data directly without a dedicated internal tool -
 # there is no MVP requirement for an admin-facing UI beyond Django's.
-@admin.register(Product)
+
+class RestrictedAdminSite(AdminSite):
+    def has_permission(self, request):
+        return request.user.is_active and request.user.is_staff and request.user.is_superuser
+
+
+admin_site = RestrictedAdminSite()
+
+
 class ProductAdmin(admin.ModelAdmin):
     form = ProductForm
 
@@ -38,7 +48,6 @@ class ProductAdmin(admin.ModelAdmin):
 # path entirely (the admin's auto-generated add form talks straight to
 # the ORM). New movements must go through the movement_create view, the
 # one path that keeps the ledger append-only and stock-safe.
-@admin.register(StockMovement)
 class StockMovementAdmin(admin.ModelAdmin):
     list_display = ('product', 'type', 'quantity', 'date', 'reason', 'user')
     list_filter = ('type', 'date')
@@ -53,3 +62,9 @@ class StockMovementAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+admin_site.register(Product, ProductAdmin)
+admin_site.register(StockMovement, StockMovementAdmin)
+admin_site.register(User)
+admin_site.register(Group)
