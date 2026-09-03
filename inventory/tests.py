@@ -1,4 +1,4 @@
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Group, User
 from django.db import connection, transaction
 from django.db.utils import IntegrityError
 from django.test import TestCase, TransactionTestCase, skipUnlessDBFeature
@@ -608,3 +608,113 @@ class CrossCompanyIsolationTestCase(TestCase):
     def test_product_list_does_not_show_other_companys_products(self):
         response = self.client.get(reverse('product_list'))
         self.assertNotContains(response, 'Produto da Empresa B')
+
+
+class EmployeeManagementTestCase(TestCase):
+    """Covers #47: Gestor can deactivate/reactivate an employee's login
+    (User.is_active, never delete - see employee_toggle_active's
+    docstring for why). Three access-control layers are tested:
+    Gestor-only (gestor_required), same-company-only (IDOR, same
+    reasoning as #44), and no self-deactivation.
+    """
+
+    def setUp(self):
+        self.company_a = Company.objects.create(name='Empresa A')
+        self.company_b = Company.objects.create(name='Empresa B')
+
+        gestor_group = Group.objects.get(name='Gestor')
+
+        self.gestor = User.objects.create_user(username='gestor_a', password='senha-teste-123')
+        self.gestor.groups.add(gestor_group)
+        self.gestor_membership = Membership.objects.create(user=self.gestor, company=self.company_a)
+
+        self.operador = User.objects.create_user(username='operador_a', password='senha-teste-123')
+        self.operador_membership = Membership.objects.create(user=self.operador, company=self.company_a)
+
+        # Funcionário de outra empresa, para os testes de isolamento
+        self.other_gestor = User.objects.create_user(username='gestor_b', password='senha-teste-123')
+        self.other_gestor.groups.add(gestor_group)
+        Membership.objects.create(user=self.other_gestor, company=self.company_b)
+
+        self.other_operador = User.objects.create_user(username='operador_b', password='senha-teste-123')
+        self.other_operador_membership = Membership.objects.create(
+            user=self.other_operador, company=self.company_b
+        )
+
+    # --- acesso restrito ao grupo Gestor ---
+
+    def test_operador_cannot_view_employee_list(self):
+        self.client.force_login(self.operador)
+        response = self.client.get(reverse('employee_list'))
+        self.assertEqual(response.status_code, 403)
+
+    def test_operador_cannot_toggle_employee_active(self):
+        self.client.force_login(self.operador)
+        response = self.client.post(
+            reverse('employee_toggle_active', args=[self.gestor_membership.id])
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_gestor_can_view_employee_list(self):
+        self.client.force_login(self.gestor)
+        response = self.client.get(reverse('employee_list'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'operador_a')
+
+    # --- isolamento entre empresas (mesmo raciocínio do #44) ---
+
+    def test_employee_list_does_not_show_other_companys_employees(self):
+        self.client.force_login(self.gestor)
+        response = self.client.get(reverse('employee_list'))
+        self.assertNotContains(response, 'gestor_b')
+        self.assertNotContains(response, 'operador_b')
+
+    def test_gestor_cannot_toggle_employee_of_other_company(self):
+        self.client.force_login(self.gestor)
+        response = self.client.post(
+            reverse('employee_toggle_active', args=[self.other_operador_membership.id])
+        )
+        self.assertEqual(response.status_code, 404)
+        self.other_operador.refresh_from_db()
+        self.assertTrue(self.other_operador.is_active)
+
+    # --- bloqueio de auto-desativação ---
+
+    def test_gestor_cannot_deactivate_own_access(self):
+        self.client.force_login(self.gestor)
+        response = self.client.post(
+            reverse('employee_toggle_active', args=[self.gestor_membership.id])
+        )
+        self.assertRedirects(response, reverse('employee_list'))
+        self.gestor.refresh_from_db()
+        self.assertTrue(self.gestor.is_active)
+
+    # --- toggle funcionando nos dois sentidos ---
+
+    def test_gestor_deactivates_operador(self):
+        self.client.force_login(self.gestor)
+        response = self.client.post(
+            reverse('employee_toggle_active', args=[self.operador_membership.id])
+        )
+        self.assertRedirects(response, reverse('employee_list'))
+        self.operador.refresh_from_db()
+        self.assertFalse(self.operador.is_active)
+
+    def test_gestor_reactivates_operador(self):
+        self.operador.is_active = False
+        self.operador.save(update_fields=['is_active'])
+
+        self.client.force_login(self.gestor)
+        response = self.client.post(
+            reverse('employee_toggle_active', args=[self.operador_membership.id])
+        )
+        self.assertRedirects(response, reverse('employee_list'))
+        self.operador.refresh_from_db()
+        self.assertTrue(self.operador.is_active)
+
+    def test_deactivated_employee_cannot_log_in(self):
+        self.operador.is_active = False
+        self.operador.save(update_fields=['is_active'])
+
+        logged_in = self.client.login(username='operador_a', password='senha-teste-123')
+        self.assertFalse(logged_in)

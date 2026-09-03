@@ -3,7 +3,10 @@ from django.core.paginator import Paginator
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from .forms import MovementForm, ProductForm
-from .models import Product, StockMovement
+from .models import (
+    Product, 
+    StockMovement,
+    Membership)
 from .services import register_movement as register_movement_service
 from .services import (
     InsufficientStockError, 
@@ -11,6 +14,7 @@ from .services import (
     InvalidQuantityError,
     InvalidMovementTypeError
 )
+from .decorators import gestor_required
 
 
 @login_required
@@ -184,3 +188,49 @@ def movement_create(request, product_id):
         form = MovementForm()
 
     return render(request, 'inventory/movement_create.html', {'product': product, 'form': form})
+
+
+@login_required
+@gestor_required
+def employee_list(request):
+    """Lists the employees (Membership) of the logged-in Gestor's company.
+
+    Restricted to the Gestor group (#47) - Operador shouldn't see or
+    manage other employees' access.
+    """
+    memberships = Membership.objects.filter(
+        company=request.user.membership.company
+    ).select_related('user').order_by('user__username')
+
+    return render(request, 'inventory/employee_list.html', {
+        'memberships': memberships
+    })
+
+
+@login_required
+@gestor_required
+def employee_toggle_active(request, membership_id):
+    """Activates/deactivates an employee's login access (#47).
+
+    Toggles User.is_active instead of deleting the User - StockMovement.user
+    has on_delete=SET_NULL, so deleting the account would erase the
+    authorship of movements they registered, weakening the auditable
+    history (PRD §3). Same reasoning already applied to Product's
+    soft delete.
+    """
+    membership = get_object_or_404(
+        Membership, id=membership_id, company=request.user.membership.company
+    )
+
+    if membership.user_id == request.user.id:
+        messages.error(request, 'Você não pode desativar seu próprio acesso.')
+        return redirect('employee_list')
+
+    if request.method == 'POST':
+        membership.user.is_active = not membership.user.is_active
+        membership.user.save(update_fields=['is_active'])
+        status = 'ativado' if membership.user.is_active else 'desativado'
+        messages.success(request, f'Acesso de {membership.user.username} {status}.')
+        return redirect('employee_list')
+
+    return render(request, 'inventory/employee_toggle_active.html', {'membership': membership})

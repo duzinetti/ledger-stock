@@ -1,0 +1,28 @@
+{% extends 'inventory/base.html' %}
+
+{% block content %}
+    <h2>Funcionários</h2>
+
+    <table border="1">
+        <tr>
+            <th>Usuário</th>
+            <th>Status</th>
+            <th></th>
+        </tr>
+        {% for membership in memberships %}
+        <tr>
+            <td>{{ membership.user.username }}</td>
+            <td>{% if membership.user.is_active %}Ativo{% else %}Inativo{% endif %}</td>
+            <td>
+                {% if membership.user_id != user.id %}
+                    <a href="{% url 'employee_toggle_active' membership.id %}">
+                        {% if membership.user.is_active %}Desativar{% else %}Reativar{% endif %}
+                    </a>
+                {% endif %}
+            </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="3">Nenhum funcionário cadastrado.</td></tr>
+        {% endfor %}
+    </table>
+{% endblock %}
