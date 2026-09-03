@@ -1,0 +1,21 @@
+{% extends 'inventory/base.html' %}
+
+{% block content %}
+    {% if membership.user.is_active %}
+        <h2>Desativar acesso</h2>
+        <p>Tem certeza que deseja desativar o acesso de <strong>{{ membership.user.username }}</strong>? O login dele deixará de funcionar imediatamente, mas o histórico de movimentações registrado por ele permanece preservado.</p>
+        <form method="post">
+            {% csrf_token %}
+            <button type="submit">Confirmar desativação</button>
+            <a href="{% url 'employee_list' %}">Cancelar</a>
+        </form>
+    {% else %}
+        <h2>Reativar acesso</h2>
+        <p>Tem certeza que deseja reativar o acesso de <strong>{{ membership.user.username }}</strong>?</p>
+        <form method="post">
+            {% csrf_token %}
+            <button type="submit">Confirmar reativação</button>
+            <a href="{% url 'employee_list' %}">Cancelar</a>
+        </form>
+    {% endif %}
+{% endblock %}

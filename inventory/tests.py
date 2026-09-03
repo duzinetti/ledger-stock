@@ -1,4 +1,4 @@
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Group, User
 from django.db import connection, transaction
 from django.db.utils import IntegrityError
 from django.test import TestCase, TransactionTestCase, skipUnlessDBFeature
@@ -7,7 +7,7 @@ from django.urls import reverse
 from django.db.models import ProtectedError
 
 from .forms import MovementForm, ProductForm
-from .models import Product, StockMovement
+from .models import Company, Membership, Product, StockMovement
 from .services import (
     register_movement,
     InactiveProductError,
@@ -22,8 +22,9 @@ import threading
 
 class CurrentQuantityTestCase(TestCase):
     def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
         self.product = Product.objects.create(
-            name='M6 Screw', price=0.50, minimum_quantity=10
+            company=self.company, name='M6 Screw', price=0.50, minimum_quantity=10
         )
 
     def test_current_quantity_sums_in_and_out_movements(self):
@@ -45,9 +46,10 @@ class ListingWithoutNPlusOneTestCase(TestCase):
     """Ensures the N+1 fix (architecture review) keeps holding."""
 
     def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
         for i in range(5):
             product = Product.objects.create(
-                name=f'Product {i}', price=10, minimum_quantity=5
+                company=self.company, name=f'Product {i}', price=10, minimum_quantity=5
             )
             StockMovement.objects.create(product=product, type='IN', quantity=50)
 
@@ -83,8 +85,9 @@ class ListingWithoutNPlusOneTestCase(TestCase):
 
 class RegisterMovementServiceTestCase(TestCase):
     def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
         self.product = Product.objects.create(
-            name='M6 Screw', price=0.50, minimum_quantity=10
+            company=self.company, name='M6 Screw', price=0.50, minimum_quantity=10
         )
         StockMovement.objects.create(product=self.product, type='IN', quantity=20)
 
@@ -136,7 +139,7 @@ class RegisterMovementServiceTestCase(TestCase):
 
     def test_movement_on_inactive_product_without_stock_is_blocked(self):
         empty_product = Product.objects.create(
-            name='Discontinued Widget', price=1, minimum_quantity=0, active=False
+            company=self.company, name='Discontinued Widget', price=1, minimum_quantity=0, active=False
         )
         with self.assertRaises(InactiveProductError):
             register_movement(empty_product.id, movement_type='IN', quantity=5)
@@ -148,10 +151,12 @@ class LoginRequiredTestCase(TestCase):
     """Covers PRD §6.4: every inventory view requires authentication."""
 
     def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
         self.product = Product.objects.create(
-            name='M6 Screw', price=0.50, minimum_quantity=10
+            company=self.company, name='M6 Screw', price=0.50, minimum_quantity=10
         )
         self.user = User.objects.create_user(username='juliana', password='senha-teste-123')
+        Membership.objects.create(user=self.user, company=self.company)
 
     def test_anonymous_request_is_redirected_to_login(self):
         response = self.client.get(reverse('product_list'))
@@ -168,6 +173,28 @@ class LoginRequiredTestCase(TestCase):
         url = reverse('product_detail', args=[self.product.id])
         response = self.client.get(url)
         self.assertRedirects(response, f"{reverse('login')}?next={url}")
+
+
+class ProductCreateViewTestCase(TestCase):
+    """Covers a gap found while implementing #17: ProductForm doesn't
+    expose `company` (the logged-in user should never pick it), but
+    nothing was assigning it either - product_create crashed with an
+    IntegrityError on every submission, and no test caught it."""
+
+    def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
+        self.user = User.objects.create_user(username='juliana', password='senha-teste-123')
+        Membership.objects.create(user=self.user, company=self.company)
+        self.client.force_login(self.user)
+
+    def test_valid_post_creates_product_assigned_to_the_users_company(self):
+        response = self.client.post(reverse('product_create'), {
+            'name': 'Parafuso', 'category': '', 'price': '1.50', 'minimum_quantity': 5,
+        })
+
+        self.assertRedirects(response, reverse('product_list'))
+        product = Product.objects.get(name='Parafuso')
+        self.assertEqual(product.company, self.company)
 
 
 class ProductFormTestCase(TestCase):
@@ -218,8 +245,9 @@ class StockMovementConstraintsTestCase(TestCase):
     """
 
     def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
         self.product = Product.objects.create(
-            name='M6 Screw', price=0.50, minimum_quantity=10
+            company=self.company, name='M6 Screw', price=0.50, minimum_quantity=10
         )
 
     def test_non_positive_quantity_is_rejected_at_db_level(self):
@@ -245,11 +273,15 @@ class ProductSoftDeleteTestCase(TestCase):
     """
 
     def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
         self.product = Product.objects.create(
-            name='M6 Screw', price=0.50, minimum_quantity=10
+            company=self.company, name='M6 Screw', price=0.50, minimum_quantity=10
         )
         StockMovement.objects.create(product=self.product, type='IN', quantity=10)
         self.user = User.objects.create_user(username='juliana', password='senha-teste-123')
+        Membership.objects.create(user=self.user, company=self.company)
+        gestor_group = Group.objects.get(name='Gestor')
+        self.user.groups.add(gestor_group)
         self.client.force_login(self.user)
 
     def test_delete_view_deactivates_instead_of_removing_the_row(self):
@@ -285,9 +317,12 @@ class ProductDeletionProtectionTestCase(TestCase):
     ProductSoftDeleteTestCase).
     """
 
+    def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
+
     def test_deleting_a_product_with_movements_is_blocked_at_db_level(self):
         product = Product.objects.create(
-            name='M6 Screw', price=0.50, minimum_quantity=10
+            company=self.company, name='M6 Screw', price=0.50, minimum_quantity=10
         )
         StockMovement.objects.create(product=product, type='IN', quantity=10)
 
@@ -298,7 +333,7 @@ class ProductDeletionProtectionTestCase(TestCase):
 
     def test_deleting_a_product_with_no_movements_is_allowed(self):
         product = Product.objects.create(
-            name='Never Sold Widget', price=1, minimum_quantity=0
+            company=self.company, name='Never Sold Widget', price=1, minimum_quantity=0
         )
 
         product.delete()
@@ -312,11 +347,12 @@ class StockMovementAdminPermissionsTestCase(TestCase):
     """
 
     def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
         self.superuser = User.objects.create_superuser(
             username='admin', password='senha-teste-123', email='admin@example.com'
         )
         self.product = Product.objects.create(
-            name='M6 Screw', price=0.50, minimum_quantity=10
+            company=self.company, name='M6 Screw', price=0.50, minimum_quantity=10
         )
         self.movement = StockMovement.objects.create(
             product=self.product, type='IN', quantity=10
@@ -357,10 +393,12 @@ class MovementCreateRaceConditionTestCase(TestCase):
     """Covers #22: Product.DoesNotExist inside register_movement() must not surface as an unhandled 500."""
 
     def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
         self.product = Product.objects.create(
-            name='M6 Screw', price=0.50, minimum_quantity=10
+            company=self.company, name='M6 Screw', price=0.50, minimum_quantity=10
         )
         self.user = User.objects.create_user(username='juliana', password='senha-teste-123')
+        Membership.objects.create(user=self.user, company=self.company)
         self.client.force_login(self.user)
 
     def test_product_deleted_between_view_lookup_and_service_call(self):
@@ -380,28 +418,32 @@ class MovementCreateRaceConditionTestCase(TestCase):
 class ProductConstraintsTestCase(TestCase):
     """Covers the DB-level backstop for Product, bypassing ProductForm entirely (e.g. shell, admin, future API)."""
 
+    def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
+
     def test_non_positive_price_is_rejected_at_db_level(self):
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
-                Product.objects.create(name='X', price=0, minimum_quantity=5)
+                Product.objects.create(company=self.company, name='X', price=0, minimum_quantity=5)
 
     def test_negative_price_is_rejected_at_db_level(self):
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
-                Product.objects.create(name='X', price=-10, minimum_quantity=5)
+                Product.objects.create(company=self.company, name='X', price=-10, minimum_quantity=5)
 
     def test_negative_minimum_quantity_is_rejected_at_db_level(self):
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
-                Product.objects.create(name='X', price=10, minimum_quantity=-1)
+                Product.objects.create(company=self.company, name='X', price=10, minimum_quantity=-1)
 
 
 class ConcurrentStockMovementTestCase(TransactionTestCase):
     """Covers #24: proves (or would prove) that select_for_update() actually prevents overselling under real concurrent writes - not exercised on SQLite, where the feature is a documented no-op (see docstring in services.register_movement())."""
 
     def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
         self.product = Product.objects.create(
-            name='M6 Screw', price=0.50, minimum_quantity=10
+            company=self.company, name='M6 Screw', price=0.50, minimum_quantity=10
         )
         StockMovement.objects.create(product=self.product, type='IN', quantity=20)
 
@@ -438,11 +480,13 @@ class MovementCreateViewTestCase(TestCase):
     """Covers #25: movement_create had zero test coverage via HTTP."""
 
     def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
         self.product = Product.objects.create(
-            name='M6 screw', price=0.50, minimum_quantity=10
+            company=self.company, name='M6 screw', price=0.50, minimum_quantity=10
         )
-        StockMovement.objects.create(product=self.product, type='IN', quantity=20) 
+        StockMovement.objects.create(product=self.product, type='IN', quantity=20)
         self.user = User.objects.create_user(username='juliana', password='senha-teste-123')
+        Membership.objects.create(user=self.user, company=self.company)
         self.client.force_login(self.user)
         self.url = reverse('movement_create', args=[self.product.id])
 
@@ -511,3 +555,259 @@ class MovementCreateViewTestCase(TestCase):
 
         self.assertRedirects(response, reverse('product_detail', args=[self.product.id]))
         self.assertContains(response, 'Tipo de movimentação inválido')
+
+
+
+class CrossCompanyIsolationTestCase(TestCase):
+    """Covers #44: a user from Company A must not reach Company B's
+    product through any object-specific lookup, not just be filtered
+    out of listings - including by typing the URL directly (IDOR).
+    Every case expects 404, not 403: 403 would confirm the id exists,
+    404 treats "wrong company" identically to "never existed".
+    """
+
+    def setUp(self):
+        self.company_a = Company.objects.create(name='Empresa A')
+        self.company_b = Company.objects.create(name='Empresa B')
+
+        self.user_a = User.objects.create_user(username='dono_a', password='senha-teste-123')
+        Membership.objects.create(user=self.user_a, company=self.company_a)
+        gestor_group = Group.objects.get(name='Gestor')
+        self.user_a.groups.add(gestor_group)
+        self.client.force_login(self.user_a)
+
+        self.product_b = Product.objects.create(
+            company=self.company_b, name='Produto da Empresa B', price=10, minimum_quantity=1
+        )
+        StockMovement.objects.create(product=self.product_b, type='IN', quantity=5)
+
+    def test_product_detail_of_other_company_is_404(self):
+        response = self.client.get(reverse('product_detail', args=[self.product_b.id]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_product_update_of_other_company_is_404(self):
+        response = self.client.get(reverse('product_update', args=[self.product_b.id]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_product_delete_of_other_company_is_404(self):
+        response = self.client.get(reverse('product_delete', args=[self.product_b.id]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_product_delete_post_of_other_company_is_404_and_does_not_deactivate(self):
+        response = self.client.post(reverse('product_delete', args=[self.product_b.id]))
+        self.assertEqual(response.status_code, 404)
+        self.product_b.refresh_from_db()
+        self.assertTrue(self.product_b.active)
+
+    def test_movement_create_of_other_company_is_404(self):
+        response = self.client.get(reverse('movement_create', args=[self.product_b.id]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_movement_create_post_of_other_company_is_404_and_creates_no_movement(self):
+        response = self.client.post(reverse('movement_create', args=[self.product_b.id]), {
+            'type': 'IN', 'quantity': 5, 'reason': '',
+        })
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(self.product_b.movements.count(), 1)  # only the one from setUp
+
+    def test_product_list_does_not_show_other_companys_products(self):
+        response = self.client.get(reverse('product_list'))
+        self.assertNotContains(response, 'Produto da Empresa B')
+
+
+class EmployeeManagementTestCase(TestCase):
+    """Covers #47: Gestor can deactivate/reactivate an employee's login
+    (User.is_active, never delete - see employee_toggle_active's
+    docstring for why). Three access-control layers are tested:
+    Gestor-only (gestor_required), same-company-only (IDOR, same
+    reasoning as #44), and no self-deactivation.
+    """
+
+    def setUp(self):
+        self.company_a = Company.objects.create(name='Empresa A')
+        self.company_b = Company.objects.create(name='Empresa B')
+
+        gestor_group = Group.objects.get(name='Gestor')
+
+        self.gestor = User.objects.create_user(username='gestor_a', password='senha-teste-123')
+        self.gestor.groups.add(gestor_group)
+        self.gestor_membership = Membership.objects.create(user=self.gestor, company=self.company_a)
+
+        self.operador = User.objects.create_user(username='operador_a', password='senha-teste-123')
+        self.operador_membership = Membership.objects.create(user=self.operador, company=self.company_a)
+
+        # Funcionário de outra empresa, para os testes de isolamento
+        self.other_gestor = User.objects.create_user(username='gestor_b', password='senha-teste-123')
+        self.other_gestor.groups.add(gestor_group)
+        Membership.objects.create(user=self.other_gestor, company=self.company_b)
+
+        self.other_operador = User.objects.create_user(username='operador_b', password='senha-teste-123')
+        self.other_operador_membership = Membership.objects.create(
+            user=self.other_operador, company=self.company_b
+        )
+
+    # --- acesso restrito ao grupo Gestor ---
+
+    def test_operador_cannot_view_employee_list(self):
+        self.client.force_login(self.operador)
+        response = self.client.get(reverse('employee_list'))
+        self.assertEqual(response.status_code, 403)
+
+    def test_operador_cannot_toggle_employee_active(self):
+        self.client.force_login(self.operador)
+        response = self.client.post(
+            reverse('employee_toggle_active', args=[self.gestor_membership.id])
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_gestor_can_view_employee_list(self):
+        self.client.force_login(self.gestor)
+        response = self.client.get(reverse('employee_list'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'operador_a')
+
+    # --- isolamento entre empresas (mesmo raciocínio do #44) ---
+
+    def test_employee_list_does_not_show_other_companys_employees(self):
+        self.client.force_login(self.gestor)
+        response = self.client.get(reverse('employee_list'))
+        self.assertNotContains(response, 'gestor_b')
+        self.assertNotContains(response, 'operador_b')
+
+    def test_gestor_cannot_toggle_employee_of_other_company(self):
+        self.client.force_login(self.gestor)
+        response = self.client.post(
+            reverse('employee_toggle_active', args=[self.other_operador_membership.id])
+        )
+        self.assertEqual(response.status_code, 404)
+        self.other_operador.refresh_from_db()
+        self.assertTrue(self.other_operador.is_active)
+
+    # --- bloqueio de auto-desativação ---
+
+    def test_gestor_cannot_deactivate_own_access(self):
+        self.client.force_login(self.gestor)
+        response = self.client.post(
+            reverse('employee_toggle_active', args=[self.gestor_membership.id])
+        )
+        self.assertRedirects(response, reverse('employee_list'))
+        self.gestor.refresh_from_db()
+        self.assertTrue(self.gestor.is_active)
+
+    # --- toggle funcionando nos dois sentidos ---
+
+    def test_gestor_deactivates_operador(self):
+        self.client.force_login(self.gestor)
+        response = self.client.post(
+            reverse('employee_toggle_active', args=[self.operador_membership.id])
+        )
+        self.assertRedirects(response, reverse('employee_list'))
+        self.operador.refresh_from_db()
+        self.assertFalse(self.operador.is_active)
+
+    def test_gestor_reactivates_operador(self):
+        self.operador.is_active = False
+        self.operador.save(update_fields=['is_active'])
+
+        self.client.force_login(self.gestor)
+        response = self.client.post(
+            reverse('employee_toggle_active', args=[self.operador_membership.id])
+        )
+        self.assertRedirects(response, reverse('employee_list'))
+        self.operador.refresh_from_db()
+        self.assertTrue(self.operador.is_active)
+
+    def test_deactivated_employee_cannot_log_in(self):
+        self.operador.is_active = False
+        self.operador.save(update_fields=['is_active'])
+
+        logged_in = self.client.login(username='operador_a', password='senha-teste-123')
+        self.assertFalse(logged_in)
+
+
+class ProductReactivationTestCase(TestCase):
+    """Covers #29: a Gestor can list and reactivate a soft-deleted
+    product. Same three access-control layers as EmployeeManagementTestCase
+    (Gestor-only, same-company-only), minus the self-block - a product
+    has no "self" to protect.
+    """
+
+    def setUp(self):
+        self.company_a = Company.objects.create(name='Empresa A')
+        self.company_b = Company.objects.create(name='Empresa B')
+
+        gestor_group = Group.objects.get(name='Gestor')
+
+        self.gestor = User.objects.create_user(username='gestor_a', password='senha-teste-123')
+        self.gestor.groups.add(gestor_group)
+        Membership.objects.create(user=self.gestor, company=self.company_a)
+
+        self.operador = User.objects.create_user(username='operador_a', password='senha-teste-123')
+        Membership.objects.create(user=self.operador, company=self.company_a)
+
+        self.inactive_product = Product.objects.create(
+            company=self.company_a, name='Produto Inativo', price=10, minimum_quantity=1, active=False
+        )
+        self.active_product = Product.objects.create(
+            company=self.company_a, name='Produto Ativo', price=10, minimum_quantity=1, active=True
+        )
+
+        # Produto inativo de outra empresa, para os testes de isolamento
+        self.other_inactive_product = Product.objects.create(
+            company=self.company_b, name='Produto Inativo da Empresa B', price=10, minimum_quantity=1, active=False
+        )
+
+    # --- acesso restrito ao grupo Gestor ---
+
+    def test_operador_cannot_view_inactive_product_list(self):
+        self.client.force_login(self.operador)
+        response = self.client.get(reverse('product_inactive_list'))
+        self.assertEqual(response.status_code, 403)
+
+    def test_operador_cannot_reactivate_product(self):
+        self.client.force_login(self.operador)
+        response = self.client.post(reverse('product_reactivate', args=[self.inactive_product.id]))
+        self.assertEqual(response.status_code, 403)
+
+    def test_gestor_can_view_inactive_product_list(self):
+        self.client.force_login(self.gestor)
+        response = self.client.get(reverse('product_inactive_list'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Produto Inativo')
+
+    def test_inactive_product_list_does_not_show_active_products(self):
+        self.client.force_login(self.gestor)
+        response = self.client.get(reverse('product_inactive_list'))
+        self.assertNotContains(response, 'Produto Ativo')
+
+    # --- isolamento entre empresas (mesmo raciocínio do #44) ---
+
+    def test_inactive_product_list_does_not_show_other_companys_products(self):
+        self.client.force_login(self.gestor)
+        response = self.client.get(reverse('product_inactive_list'))
+        self.assertNotContains(response, 'Produto Inativo da Empresa B')
+
+    def test_gestor_cannot_reactivate_product_of_other_company(self):
+        self.client.force_login(self.gestor)
+        response = self.client.post(
+            reverse('product_reactivate', args=[self.other_inactive_product.id])
+        )
+        self.assertEqual(response.status_code, 404)
+        self.other_inactive_product.refresh_from_db()
+        self.assertFalse(self.other_inactive_product.active)
+
+    # --- reativação em si ---
+
+    def test_gestor_reactivates_product(self):
+        self.client.force_login(self.gestor)
+        response = self.client.post(reverse('product_reactivate', args=[self.inactive_product.id]))
+        self.assertRedirects(response, reverse('product_inactive_list'))
+        self.inactive_product.refresh_from_db()
+        self.assertTrue(self.inactive_product.active)
+
+    def test_reactivated_product_appears_in_regular_listing(self):
+        self.client.force_login(self.gestor)
+        self.client.post(reverse('product_reactivate', args=[self.inactive_product.id]))
+
+        response = self.client.get(reverse('product_list'))
+        self.assertContains(response, 'Produto Inativo')

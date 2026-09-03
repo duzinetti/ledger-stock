@@ -10,6 +10,10 @@
     <nav>
         {% if user.is_authenticated %}
             {{ user.username }}
+            {% if is_gestor %}
+                | <a href="{% url 'employee_list' %}">Funcionários</a>
+                | <a href="{% url 'product_inactive_list' %}">Produtos inativos</a>
+            {% endif %}
             <form method="post" action="{% url 'logout' %}" style="display:inline">
                 {% csrf_token %}
                 <button type="submit">Sair</button>

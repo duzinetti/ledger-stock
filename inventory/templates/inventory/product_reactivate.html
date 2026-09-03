@@ -1,0 +1,12 @@
+{% extends 'inventory/base.html' %}
+
+{% block content %}
+    <h2>Reativar produto</h2>
+    <p>Tem certeza que deseja reativar <strong>{{ product.name }}</strong>? Ele voltará a aparecer na listagem de produtos.</p>
+
+    <form method="post">
+        {% csrf_token %}
+        <button type="submit">Confirmar reativação</button>
+        <a href="{% url 'product_inactive_list' %}">Cancelar</a>
+    </form>
+{% endblock %}
