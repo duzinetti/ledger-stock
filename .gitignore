@@ -41,3 +41,9 @@ htmlcov/
 
 
 .claude/skills
+
+# Ferramentas do Claude Code (config/artefatos, não fazem parte do LedgerStock)
+.claudeignore
+.graphifyignore
+graphify-out/
+skills-lock.json
