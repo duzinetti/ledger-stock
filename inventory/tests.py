@@ -280,6 +280,8 @@ class ProductSoftDeleteTestCase(TestCase):
         StockMovement.objects.create(product=self.product, type='IN', quantity=10)
         self.user = User.objects.create_user(username='juliana', password='senha-teste-123')
         Membership.objects.create(user=self.user, company=self.company)
+        gestor_group = Group.objects.get(name='Gestor')
+        self.user.groups.add(gestor_group)
         self.client.force_login(self.user)
 
     def test_delete_view_deactivates_instead_of_removing_the_row(self):
@@ -555,6 +557,7 @@ class MovementCreateViewTestCase(TestCase):
         self.assertContains(response, 'Tipo de movimentação inválido')
 
 
+
 class CrossCompanyIsolationTestCase(TestCase):
     """Covers #44: a user from Company A must not reach Company B's
     product through any object-specific lookup, not just be filtered
@@ -569,6 +572,8 @@ class CrossCompanyIsolationTestCase(TestCase):
 
         self.user_a = User.objects.create_user(username='dono_a', password='senha-teste-123')
         Membership.objects.create(user=self.user_a, company=self.company_a)
+        gestor_group = Group.objects.get(name='Gestor')
+        self.user_a.groups.add(gestor_group)
         self.client.force_login(self.user_a)
 
         self.product_b = Product.objects.create(
@@ -718,3 +723,91 @@ class EmployeeManagementTestCase(TestCase):
 
         logged_in = self.client.login(username='operador_a', password='senha-teste-123')
         self.assertFalse(logged_in)
+
+
+class ProductReactivationTestCase(TestCase):
+    """Covers #29: a Gestor can list and reactivate a soft-deleted
+    product. Same three access-control layers as EmployeeManagementTestCase
+    (Gestor-only, same-company-only), minus the self-block - a product
+    has no "self" to protect.
+    """
+
+    def setUp(self):
+        self.company_a = Company.objects.create(name='Empresa A')
+        self.company_b = Company.objects.create(name='Empresa B')
+
+        gestor_group = Group.objects.get(name='Gestor')
+
+        self.gestor = User.objects.create_user(username='gestor_a', password='senha-teste-123')
+        self.gestor.groups.add(gestor_group)
+        Membership.objects.create(user=self.gestor, company=self.company_a)
+
+        self.operador = User.objects.create_user(username='operador_a', password='senha-teste-123')
+        Membership.objects.create(user=self.operador, company=self.company_a)
+
+        self.inactive_product = Product.objects.create(
+            company=self.company_a, name='Produto Inativo', price=10, minimum_quantity=1, active=False
+        )
+        self.active_product = Product.objects.create(
+            company=self.company_a, name='Produto Ativo', price=10, minimum_quantity=1, active=True
+        )
+
+        # Produto inativo de outra empresa, para os testes de isolamento
+        self.other_inactive_product = Product.objects.create(
+            company=self.company_b, name='Produto Inativo da Empresa B', price=10, minimum_quantity=1, active=False
+        )
+
+    # --- acesso restrito ao grupo Gestor ---
+
+    def test_operador_cannot_view_inactive_product_list(self):
+        self.client.force_login(self.operador)
+        response = self.client.get(reverse('product_inactive_list'))
+        self.assertEqual(response.status_code, 403)
+
+    def test_operador_cannot_reactivate_product(self):
+        self.client.force_login(self.operador)
+        response = self.client.post(reverse('product_reactivate', args=[self.inactive_product.id]))
+        self.assertEqual(response.status_code, 403)
+
+    def test_gestor_can_view_inactive_product_list(self):
+        self.client.force_login(self.gestor)
+        response = self.client.get(reverse('product_inactive_list'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Produto Inativo')
+
+    def test_inactive_product_list_does_not_show_active_products(self):
+        self.client.force_login(self.gestor)
+        response = self.client.get(reverse('product_inactive_list'))
+        self.assertNotContains(response, 'Produto Ativo')
+
+    # --- isolamento entre empresas (mesmo raciocínio do #44) ---
+
+    def test_inactive_product_list_does_not_show_other_companys_products(self):
+        self.client.force_login(self.gestor)
+        response = self.client.get(reverse('product_inactive_list'))
+        self.assertNotContains(response, 'Produto Inativo da Empresa B')
+
+    def test_gestor_cannot_reactivate_product_of_other_company(self):
+        self.client.force_login(self.gestor)
+        response = self.client.post(
+            reverse('product_reactivate', args=[self.other_inactive_product.id])
+        )
+        self.assertEqual(response.status_code, 404)
+        self.other_inactive_product.refresh_from_db()
+        self.assertFalse(self.other_inactive_product.active)
+
+    # --- reativação em si ---
+
+    def test_gestor_reactivates_product(self):
+        self.client.force_login(self.gestor)
+        response = self.client.post(reverse('product_reactivate', args=[self.inactive_product.id]))
+        self.assertRedirects(response, reverse('product_inactive_list'))
+        self.inactive_product.refresh_from_db()
+        self.assertTrue(self.inactive_product.active)
+
+    def test_reactivated_product_appears_in_regular_listing(self):
+        self.client.force_login(self.gestor)
+        self.client.post(reverse('product_reactivate', args=[self.inactive_product.id]))
+
+        response = self.client.get(reverse('product_list'))
+        self.assertContains(response, 'Produto Inativo')

@@ -109,6 +109,7 @@ def product_detail(request, product_id):
 
 
 @login_required
+@gestor_required
 def product_delete(request, product_id):
     """Soft-deletes a product (confirmation page on GET, deactivation on POST).
 
@@ -127,6 +128,39 @@ def product_delete(request, product_id):
         return redirect('product_list')
 
     return render(request, 'inventory/product_delete.html', {'product': product})
+
+
+@login_required
+@gestor_required
+def product_inactive_list(request):
+    """Lists inactive (soft-deleted) products of the Gestor's company (#29).
+
+    Restricted to the Gestor group - same permission that guards
+    product_delete, mirroring the PRD decision that both directions
+    of the soft-delete (deactivate/reactivate) require the same role.
+    """
+    products = Product.objects.filter(
+        active=False, company=request.user.membership.company
+    ).order_by('name')
+
+    return render(request, 'inventory/product_inactive_list.html', {
+        'products': products,
+    })
+
+
+@login_required
+@gestor_required
+def product_reactivate(request, product_id):
+    """Reactivates a soft-deleted product (#29)."""
+    product = get_object_or_404(Product, id=product_id, company=request.user.membership.company)
+
+    if request.method == 'POST':
+        product.active = True
+        product.save(update_fields=['active'])
+        messages.success(request, f'Produto "{product.name}" reativado.')
+        return redirect('product_inactive_list')
+
+    return render(request, 'inventory/product_reactivate.html', {'product': product})
 
 
 @login_required
