@@ -44,11 +44,11 @@ de estoque, o funcionário opera sem fricção, com segurança básica.
       no model — `Product.active`, com listagem/reativação (`#29`)
 
 ### MVP.2 — Banco de dados de produção
-- [ ] PostgreSQL configurado (SQLite não serve para acesso concorrente
-      real, conforme discutido) — decisão registrada em PRD.md §10:
-      Render (hosting) + Neon (Postgres gerenciado)
-- [ ] Variáveis de ambiente via `python-decouple` (`SECRET_KEY` ainda
-      hardcoded em `settings.py`, `DEBUG=True` fixo)
+- [x] PostgreSQL configurado — Neon, branches `development` (local) e
+      `production` (Render, MVP.5) separadas. Primeira vez que o
+      `select_for_update()` roda de verdade (era no-op no SQLite)
+- [x] Variáveis de ambiente via `python-decouple` — `SECRET_KEY`/
+      `DEBUG`/dados de conexão lidos do `.env`, não mais hardcoded
 - [x] `empresa_id` no schema — `Company`, `Membership`,
       `Product.company`, isolamento por empresa em todo lookup (`#17`,
       `#44`)
@@ -156,8 +156,6 @@ Alinhado à Seção 5 do PRD.
 
 ## Próxima ação recomendada
 
-Os dois bloqueios estão resolvidos e o MVP está mais avançado do que
-esta seção sugeria antes da atualização de 2026-09-04 — falta
-essencialmente MVP.2 (Postgres/Neon + `python-decouple`, substituindo
-`SECRET_KEY`/`DEBUG` hardcoded) e MVP.5 (deploy: HTTPS, Render,
-checklist de segurança mínima). Com isso, o MVP fecha.
+Os dois bloqueios estão resolvidos e a MVP.2 está completa (Postgres/
+Neon + `python-decouple`, PR #53). Falta só a MVP.5 (deploy: HTTPS,
+Render, checklist de segurança mínima) pra fechar o MVP.
