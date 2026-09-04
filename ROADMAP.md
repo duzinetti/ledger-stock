@@ -7,27 +7,18 @@ principal: as fases antigas eram organizadas por **camada técnica**
 "pronto" significa "deployado e usável por um comércio real", não
 "todas as camadas técnicas implementadas".
 
-**Antes de tudo:** duas Questões Abertas do PRD **bloqueiam** o início
-do MVP e precisam de decisão sua antes de eu continuar implementando:
+**Status dos dois bloqueios que existiam aqui:** ambos resolvidos.
 
-> ⚠️ **Bloqueio 1 — Multi-tenancy (Questão Aberta #1 do PRD).**
-> Se a resposta de longo prazo é "sim, eventualmente", o campo
-> `empresa_id` deveria entrar no `Produto` e no model de usuário
-> **agora**, na Fase MVP, não depois. Migrar dados reais de
-> single-tenant para multi-tenant depois é caro e arriscado. Preciso
-> que você decida: (a) nasce multi-tenant desde já (mais trabalho
-> agora, path limpo depois), ou (b) fica single-tenant no MVP e
-> multi-tenant vira reescrita reconhecida como dívida técnica
-> deliberada em "Later".
+> ✅ **Bloqueio 1 — Multi-tenancy (Questão Aberta #1 do PRD).**
+> Resolvido a favor de "nasce multi-tenant desde já". Implementado
+> nesta sessão (`Company`, `Membership`, `Product.company`, isolamento
+> por empresa em todo lookup, papéis Gestor/Operador) — ver PRD.md
+> §10 e o histórico de PRs (`#17`, `#44`-`#47`, `#29`).
 
-> ⚠️ **Bloqueio 2 — Soft delete vs. exclusão física (Questão Aberta #2
-> do PRD).** Afeta o model `Produto` (campo `ativo`) e toda query que
-> lista produtos. Fácil de decidir agora, caro de mudar depois de
-> haver dados reais de exclusão no ar.
-
-Sem resposta a essas duas, vou seguir com as premissas que já assumi
-no PRD (single-tenant por ora, exclusão física por ora) — mas isso é
-dívida técnica **documentada**, não esquecida.
+> ✅ **Bloqueio 2 — Soft delete vs. exclusão física (Questão Aberta #2
+> do PRD).** Resolvido em 2026-08-19: soft delete via `Product.active`.
+> Listagem e reativação de inativos (que faltava desde a resolução
+> original) implementada em `#29`.
 
 ---
 
@@ -43,32 +34,34 @@ de estoque, o funcionário opera sem fricção, com segurança básica.
 - [x] Concorrência segura (`select_for_update`, sem race condition)
 - [x] N+1 corrigido na listagem
 - [x] Paginação e busca por nome
-- [ ] **Validação via `ModelForm`** (preço > 0, quantidade > 0,
-      nome obrigatório) — hoje ainda lê `request.POST` direto
+- [x] **Validação via `ModelForm`** (preço > 0, quantidade > 0,
+      nome obrigatório) — `ProductForm`/`MovementForm`, com
+      `clean_price` cobrindo a regra de negócio (PRD §6.1)
 - [ ] **Categoria como texto livre, aceito como dívida do MVP**
-      (PRD 6.1) — não vira `select` estruturado nesta fase
-- [ ] Decisão de exclusão física vs. soft delete (Bloqueio 2) aplicada
-      no model antes de seguir
+      (PRD 6.1) — decisão já em vigor (não é um "falta fazer", é a
+      escolha atual); vira catálogo estruturado só no V2
+- [x] Decisão de exclusão física vs. soft delete (Bloqueio 2) aplicada
+      no model — `Product.active`, com listagem/reativação (`#29`)
 
 ### MVP.2 — Banco de dados de produção
-- [ ] MySQL ou PostgreSQL configurado (SQLite não serve para acesso
-      concorrente real, conforme discutido)
-- [ ] Variáveis de ambiente via `python-decouple`
-- [ ] Se Bloqueio 1 for resolvido a favor de multi-tenant: `empresa_id`
-      entra no schema **nesta fase**, antes de qualquer dado real
-      existir
+- [ ] PostgreSQL configurado (SQLite não serve para acesso concorrente
+      real, conforme discutido) — decisão registrada em PRD.md §10:
+      Render (hosting) + Neon (Postgres gerenciado)
+- [ ] Variáveis de ambiente via `python-decouple` (`SECRET_KEY` ainda
+      hardcoded em `settings.py`, `DEBUG=True` fixo)
+- [x] `empresa_id` no schema — `Company`, `Membership`,
+      `Product.company`, isolamento por empresa em todo lookup (`#17`,
+      `#44`)
 
 ### MVP.3 — Autenticação (versão mínima, não a Fase 5 completa)
-O PRD reduz a autenticação do MVP ao essencial — papéis
-diferenciados (Operador/Gestor) ficam para V2, não MVP:
-- [ ] Login/logout
-- [ ] Login obrigatório para **todas** as ações (PRD 6.4 — a
-      recomendação registrada foi login obrigatório em tudo, inclusive
-      visualização, para um sistema comercial real, não só escrita)
-- [ ] Toda movimentação associa o usuário autenticado (campo já existe
-      no model, falta aplicar a checagem)
-- [ ] Senha com hashing padrão do Django (já é o comportamento padrão,
-      só precisa ser validado, não implementado do zero)
+- [x] Login/logout
+- [x] Login obrigatório para **todas** as ações (PRD 6.4)
+- [x] Toda movimentação associa o usuário autenticado
+- [x] Senha com hashing padrão do Django (comportamento padrão,
+      nenhuma implementação própria necessária)
+- [x] Papéis diferenciados (Operador/Gestor) — adiantado do V2 junto
+      com o pacote de multi-tenancy (`#45`, `#47`, `#29`), não ficou
+      pra depois do MVP como o plano original previa
 
 ### MVP.4 — Alerta de estoque baixo na interface
 - [x] Já implementado (property `estoque_baixo`, exibido na listagem)
@@ -94,12 +87,15 @@ o PRD é explícito que "done" é o MVP no ar, não tudo isso completo.
 
 - [ ] Dashboard com métricas agregadas (valor total, produtos
       críticos, gráfico de movimentação) — reaproveitando
-      `com_quantidade_atual()` para não reintroduzir N+1
-- [ ] Permissões por papel: `Group` Operador vs. Gestor
+      `with_current_quantity()` para não reintroduzir N+1
+- [x] Permissões por papel: `Group` Operador vs. Gestor — adiantado
+      pro pacote de multi-tenancy, ver MVP.3
 - [ ] Categoria estruturada (migrar de texto livre para model
       `Categoria`, corrigindo a dívida assumida no MVP)
-- [ ] Motivo de movimentação estruturado (enum: Venda, Devolução,
-      Perda, Ajuste — em vez de texto livre, conforme PRD 6.2)
+- [ ] Movimentação: campo `is_sale` (boolean, default `True`) +
+      `unit_price` congelado no momento da movimentação, para viabilizar
+      relatório de vendas por período (`#51`) — decisão registrada:
+      **não** estruturar `motivo` em categorias, ver `#51`
 - [ ] API REST (DRF + JWT), reaproveitando o `services.py` já existente
 - [ ] Exportação de relatório (CSV/PDF)
 - [ ] Reskin do admin (`django-jazzmin`) e estilização geral
@@ -111,13 +107,12 @@ o PRD é explícito que "done" é o MVP no ar, não tudo isso completo.
 
 Alinhado à Seção 5 do PRD.
 
-- [ ] Multi-tenancy completo, se não resolvido no Bloqueio 1 do MVP
 - [ ] Gestão de fornecedores e pedido de compra
 - [ ] Integração com PDV / marketplace
 - [ ] Previsão de demanda / sugestão de reposição (com ou sem IA —
       Fase 8 do roadmap anterior, mantida aqui)
 - [ ] 2FA (`django-otp`), auditoria avançada (`django-simple-history`),
-      rate limiting no login (`django-axes`) — seguran��a de nível
+      rate limiting no login (`django-axes`) — segurança de nível
       empresarial, relevante quando houver múltiplos clientes reais
 - [ ] App mobile nativo
 
@@ -158,7 +153,8 @@ Alinhado à Seção 5 do PRD.
 
 ## Próxima ação recomendada
 
-Responder os dois bloqueios (multi-tenancy e soft delete) antes de eu
-seguir implementando o MVP.2 (banco de dados) — são os dois pontos do
-PRD que mudam o schema, e schema é caro de corrigir depois de existir
-dado real no banco.
+Os dois bloqueios estão resolvidos e o MVP está mais avançado do que
+esta seção sugeria antes da atualização de 2026-09-04 — falta
+essencialmente MVP.2 (Postgres/Neon + `python-decouple`, substituindo
+`SECRET_KEY`/`DEBUG` hardcoded) e MVP.5 (deploy: HTTPS, Render,
+checklist de segurança mínima). Com isso, o MVP fecha.
