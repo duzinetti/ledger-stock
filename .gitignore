@@ -47,3 +47,4 @@ htmlcov/
 .graphifyignore
 graphify-out/
 skills-lock.json
+.agents/
