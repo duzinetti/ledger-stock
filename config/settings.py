@@ -2,13 +2,16 @@
 Project settings for the inventory management system.
 """
 from pathlib import Path
+from decouple import config
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Trocar em produção e mover para variável de ambiente
-SECRET_KEY = 'django-insecure-troque-esta-chave-antes-de-produção'
+# Lido do .env (nunca commitado - ver .gitignore) em vez de fixo no
+# código. Sem default: se o .env não existir, falha ao subir em vez
+# de silenciosamente usar uma chave fraca.
+SECRET_KEY = config('SECRET_KEY')
 
-DEBUG = True
+DEBUG = config('DEBUG', default=False, cast=bool)
 
 ALLOWED_HOSTS = []
 
@@ -53,18 +56,22 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'config.wsgi.application'
 
-# Banco de dados: SQLite para desenvolvimento.
-# Para migrar para MySQL, trocar o ENGINE e preencher as demais chaves:
-# 'ENGINE': 'django.db.backends.mysql',
-# 'NAME': 'estoque_db',
-# 'USER': 'root',
-# 'PASSWORD': '...',
-# 'HOST': 'localhost',
-# 'PORT': '3306',
+# Banco de dados: PostgreSQL (Neon), lido do .env - a branch
+# `development` localmente, a branch `production` no deploy (Render).
+# sslmode/channel_binding exigidos pelo Neon, passados via OPTIONS
+# (parâmetros extras repassados direto pro driver psycopg).
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.postgresql',
+        'NAME': config('DB_NAME'),
+        'USER': config('DB_USER'),
+        'PASSWORD': config('DB_PASSWORD'),
+        'HOST': config('DB_HOST'),
+        'PORT': config('DB_PORT', default='5432'),
+        'OPTIONS': {
+            'sslmode': 'require',
+            'channel_binding': 'require',
+        },
     }
 }
 

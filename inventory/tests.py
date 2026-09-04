@@ -464,6 +464,8 @@ class ConcurrentStockMovementTestCase(TransactionTestCase):
                 pass  # esperado para UMA das duas threads, se a trava funcionar
             except Exception as e:
                 errors.append(e)
+            finally:
+                connection.close()
 
         threads = [threading.Thread(target=worker) for _ in range(2)]
         for t in threads:
