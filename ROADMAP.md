@@ -66,6 +66,16 @@ de estoque, o funcionário opera sem fricção, com segurança básica.
 ### MVP.4 — Alerta de estoque baixo na interface
 - [x] Já implementado (property `estoque_baixo`, exibido na listagem)
 
+### MVP.4.5 — Estilização das telas (decisão 2026-09-04)
+Adiantado do V2 pra antes do deploy - hoje as telas são HTML cru
+(`<table border="1">`, zero CSS). Decisão do product owner: não faz
+sentido considerar o MVP "usável por um comércio real" (critério de
+conclusão abaixo) com telas nesse estado, mesmo que funcionalmente
+completas. Ver item correspondente em V2 (`django-crispy-forms`,
+Bootstrap/Tailwind) - a biblioteca a usar ainda não foi decidida.
+- [ ] Escolher abordagem de estilização (Bootstrap/Tailwind/outro)
+- [ ] Aplicar em todas as telas existentes
+
 ### MVP.5 — Deploy
 - [ ] HTTPS obrigatório, variáveis sensíveis fora do código
 - [ ] Deploy público (Railway, Render ou PythonAnywhere)
@@ -157,5 +167,7 @@ Alinhado à Seção 5 do PRD.
 ## Próxima ação recomendada
 
 Os dois bloqueios estão resolvidos e a MVP.2 está completa (Postgres/
-Neon + `python-decouple`, PR #53). Falta só a MVP.5 (deploy: HTTPS,
-Render, checklist de segurança mínima) pra fechar o MVP.
+Neon + `python-decouple`, PR #53). Falta a MVP.4.5 (estilização das
+telas, hoje HTML cru) e a MVP.5 (deploy: HTTPS, Render, checklist de
+segurança mínima) pra fechar o MVP - nessa ordem, telas antes de
+publicar.
