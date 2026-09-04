@@ -109,6 +109,9 @@ Alinhado à Seção 5 do PRD.
 
 - [ ] Gestão de fornecedores e pedido de compra
 - [ ] Integração com PDV / marketplace
+- [ ] Proteção de dados (LGPD): exportação/exclusão self-service +
+      política de privacidade (`#52`) — revisitar antes de aceitar
+      qualquer empresa de fora dos pilotos familiares como cliente
 - [ ] Previsão de demanda / sugestão de reposição (com ou sem IA —
       Fase 8 do roadmap anterior, mantida aqui)
 - [ ] 2FA (`django-otp`), auditoria avançada (`django-simple-history`),
