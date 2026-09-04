@@ -27,7 +27,7 @@
                     <td class="text-end">
                         {% if membership.user_id != user.id %}
                             <a href="{% url 'employee_toggle_active' membership.id %}"
-                               class="btn btn-sm {% if membership.user.is_active %}btn-outline-danger{% else %}btn-primary{% endif %}">
+                               class="btn btn-sm {% if membership.user.is_active %}btn-outline-danger{% else %}btn-success{% endif %}">
                                 {% if membership.user.is_active %}Desativar{% else %}Reativar{% endif %}
                             </a>
                         {% endif %}

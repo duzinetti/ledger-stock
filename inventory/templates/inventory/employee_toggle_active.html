@@ -15,7 +15,7 @@
             <p class="text-muted">Tem certeza que deseja reativar o acesso de <strong>{{ membership.user.username }}</strong>?</p>
             <form method="post" class="d-flex gap-2">
                 {% csrf_token %}
-                <button type="submit" class="btn btn-primary">Confirmar reativação</button>
+                <button type="submit" class="btn btn-success">Confirmar reativação</button>
                 <a href="{% url 'employee_list' %}" class="btn btn-outline-secondary">Cancelar</a>
             </form>
         {% endif %}

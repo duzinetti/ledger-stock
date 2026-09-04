@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-br" data-bs-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -14,18 +14,35 @@
           crossorigin="anonymous">
 
     <style>
-        :root {
-            --canvas: #f9f9fc;
-            --surface: #ffffff;
-            --ink: #16152b;
-            --ink-soft: #56536e;
-            --ink-faint: #8a87a3;
-            --hairline: #e6e5f2;
+        /* Paleta escura estilo Discord (nunca preto puro - cinza-carvão
+           em 3 camadas de profundidade: navbar mais escura, canvas no
+           meio, superfícies elevadas mais claras). Acento azul-roxeado
+           mantido como identidade de marca (é quase o blurple oficial
+           do próprio Discord); verde reservado só pra ações de criação
+           (cadastrar/registrar/reativar), nunca decorativo. */
+        :root, [data-bs-theme="dark"] {
+            --canvas: #313338;
+            --surface: #2b2d31;
+            --surface-deep: #232428;
+            --ink: #f2f3f5;
+            --ink-soft: #dbdee1;
+            --ink-faint: #949ba4;
+            --hairline: #3f4147;
             --accent: #5e6ad2;
             --accent-hover: #4b56c2;
-            --accent-tint: #eceafc;
-            --bs-primary: #5e6ad2;
+            --accent-tint: #3a3d8a;
+            --create: #23a55a;
+            --create-hover: #1e8e4d;
+
+            --bs-body-bg: var(--canvas);
+            --bs-body-color: var(--ink-soft);
+            --bs-border-color: var(--hairline);
+            --bs-secondary-bg: var(--surface);
+            --bs-tertiary-bg: var(--surface-deep);
+            --bs-primary: var(--accent);
             --bs-primary-rgb: 94, 106, 210;
+            --bs-success: var(--create);
+            --bs-success-rgb: 35, 165, 90;
             --bs-body-font-family: 'Inter', sans-serif;
             --bs-link-color: var(--accent);
             --bs-link-hover-color: var(--accent-hover);
@@ -61,11 +78,21 @@
             background-color: var(--accent);
             border-color: var(--accent);
             border-radius: 10px;
-            box-shadow: 0 1px 2px rgba(94, 106, 210, 0.25);
         }
         .btn-primary:hover, .btn-primary:focus {
             background-color: var(--accent-hover);
             border-color: var(--accent-hover);
+        }
+        .btn-success {
+            background-color: var(--create);
+            border-color: var(--create);
+            border-radius: 10px;
+            color: #ffffff;
+        }
+        .btn-success:hover, .btn-success:focus {
+            background-color: var(--create-hover);
+            border-color: var(--create-hover);
+            color: #ffffff;
         }
         .btn-outline-secondary {
             border-radius: 10px;
@@ -73,8 +100,9 @@
             color: var(--ink-soft);
         }
         .btn-outline-secondary:hover {
-            background-color: var(--ink);
-            border-color: var(--ink);
+            background-color: var(--surface-deep);
+            border-color: var(--hairline);
+            color: var(--ink);
         }
         .btn-outline-danger {
             border-radius: 10px;
@@ -82,7 +110,7 @@
 
         /* Cabeçalho */
         .navbar {
-            background-color: var(--surface);
+            background-color: var(--surface-deep);
             border-bottom: 1px solid var(--hairline);
             padding-top: 0.85rem;
             padding-bottom: 0.85rem;
@@ -102,7 +130,7 @@
             color: var(--ink) !important;
         }
         .nav-link {
-            color: var(--ink-soft);
+            color: var(--ink-faint);
             border-radius: 8px;
             padding: 0.4rem 0.85rem !important;
             font-weight: 500;
@@ -120,7 +148,7 @@
             height: 30px;
             border-radius: 50%;
             background-color: var(--accent-tint);
-            color: var(--accent-hover);
+            color: #c7cbff;
             display: inline-flex;
             align-items: center;
             justify-content: center;
@@ -128,6 +156,10 @@
             font-weight: 600;
         }
 
+        .table {
+            --bs-table-bg: transparent;
+            --bs-table-color: var(--ink-soft);
+        }
         .table > :not(caption) > * > * {
             border-bottom-color: var(--hairline);
         }
@@ -140,16 +172,21 @@
             border-bottom-width: 1px;
         }
         .table-hover > tbody > tr:hover > * {
-            background-color: var(--accent-tint);
+            background-color: var(--surface);
+            color: var(--ink);
         }
 
         .form-control, .form-select {
+            background-color: var(--surface);
             border-color: var(--hairline);
             border-radius: 8px;
+            color: var(--ink);
         }
         .form-control:focus, .form-select:focus {
+            background-color: var(--surface);
             border-color: var(--accent);
-            box-shadow: 0 0 0 0.2rem rgba(94, 106, 210, 0.15);
+            color: var(--ink);
+            box-shadow: 0 0 0 0.2rem rgba(94, 106, 210, 0.25);
         }
         .form-label {
             font-weight: 500;
@@ -158,6 +195,7 @@
         }
 
         .page-link {
+            background-color: var(--surface);
             color: var(--ink-soft);
             border-color: var(--hairline);
         }
@@ -170,7 +208,7 @@
             <a class="navbar-brand" href="{% url 'product_list' %}">
                 <svg class="brand-mark" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
                     <rect x="3" y="12" width="13" height="17" rx="3" fill="#5e6ad2"/>
-                    <rect x="16" y="3" width="13" height="17" rx="3" fill="#16152b"/>
+                    <rect x="16" y="3" width="13" height="17" rx="3" fill="#f2f3f5"/>
                 </svg>
                 Gerenciador de Estoque
             </a>
@@ -216,7 +254,7 @@
             {% for message in messages %}
                 <div class="alert {% if message.tags == 'error' %}alert-danger{% else %}alert-success{% endif %} alert-dismissible fade show" role="alert">
                     {{ message }}
-                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert" aria-label="Fechar"></button>
                 </div>
             {% endfor %}
         {% endif %}

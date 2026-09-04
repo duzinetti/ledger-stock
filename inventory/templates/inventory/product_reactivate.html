@@ -7,7 +7,7 @@
 
         <form method="post" class="d-flex gap-2">
             {% csrf_token %}
-            <button type="submit" class="btn btn-primary">Confirmar reativação</button>
+            <button type="submit" class="btn btn-success">Confirmar reativação</button>
             <a href="{% url 'product_inactive_list' %}" class="btn btn-outline-secondary">Cancelar</a>
         </form>
     </div>

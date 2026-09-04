@@ -24,7 +24,7 @@
                     <td>{{ product.category }}</td>
                     <td class="numeric">R$ {{ product.price }}</td>
                     <td class="text-end">
-                        <a href="{% url 'product_reactivate' product.id %}" class="btn btn-sm btn-primary">Reativar</a>
+                        <a href="{% url 'product_reactivate' product.id %}" class="btn btn-sm btn-success">Reativar</a>
                     </td>
                 </tr>
                 {% endfor %}

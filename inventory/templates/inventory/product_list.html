@@ -6,7 +6,7 @@
             <input type="text" name="q" class="form-control" placeholder="Buscar produto" value="{{ search_term }}">
             <button type="submit" class="btn btn-outline-secondary">Buscar</button>
         </form>
-        <a href="{% url 'product_create' %}" class="btn btn-primary">Cadastrar novo produto</a>
+        <a href="{% url 'product_create' %}" class="btn btn-success">Cadastrar novo produto</a>
     </div>
 
     {% if products %}
