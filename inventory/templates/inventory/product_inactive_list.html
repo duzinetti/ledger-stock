@@ -1,28 +1,37 @@
 {% extends 'inventory/base.html' %}
 
 {% block content %}
-    <h2>Produtos inativos</h2>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="mb-0">Produtos inativos</h2>
+        <a href="{% url 'product_list' %}" class="btn btn-outline-secondary btn-sm">Voltar para produtos ativos</a>
+    </div>
 
-    <p><a href="{% url 'product_list' %}">Voltar para produtos ativos</a></p>
-
-    <table border="1">
-        <tr>
-            <th>ID</th>
-            <th>Nome</th>
-            <th>Categoria</th>
-            <th>Preço</th>
-            <th></th>
-        </tr>
-        {% for product in products %}
-        <tr>
-            <td>{{ product.id }}</td>
-            <td>{{ product.name }}</td>
-            <td>{{ product.category }}</td>
-            <td>{{ product.price }}</td>
-            <td><a href="{% url 'product_reactivate' product.id %}">Reativar</a></td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="5">Nenhum produto inativo.</td></tr>
-        {% endfor %}
-    </table>
+    {% if products %}
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Nome</th>
+                    <th>Categoria</th>
+                    <th class="numeric">Preço</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for product in products %}
+                <tr>
+                    <td>{{ product.name }}</td>
+                    <td>{{ product.category }}</td>
+                    <td class="numeric">R$ {{ product.price }}</td>
+                    <td class="text-end">
+                        <a href="{% url 'product_reactivate' product.id %}" class="btn btn-sm btn-primary">Reativar</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-center text-muted py-5">Nenhum produto inativo.</p>
+    {% endif %}
 {% endblock %}
