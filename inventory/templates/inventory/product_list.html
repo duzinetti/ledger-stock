@@ -3,7 +3,7 @@
 {% block content %}
     <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
         <form method="get" class="d-flex gap-2">
-            <input type="text" name="q" class="form-control" placeholder="Buscar produto" value="{{ search_term }}">
+            <input type="text" name="q" class="form-control" placeholder="Buscar por nome ou ID" value="{{ search_term }}">
             <button type="submit" class="btn btn-outline-secondary">Buscar</button>
         </form>
         <a href="{% url 'product_create' %}" class="btn btn-success">Cadastrar novo produto</a>
@@ -14,6 +14,7 @@
         <table class="table table-hover align-middle">
             <thead>
                 <tr>
+                    <th class="numeric">ID</th>
                     <th>Nome</th>
                     <th>Categoria</th>
                     <th class="numeric">Preço</th>
@@ -25,6 +26,7 @@
             <tbody>
                 {% for product in products %}
                 <tr>
+                    <td class="numeric">{{ product.id }}</td>
                     <td>{{ product.name }}</td>
                     <td>{{ product.category }}</td>
                     <td class="numeric">R$ {{ product.price }}</td>

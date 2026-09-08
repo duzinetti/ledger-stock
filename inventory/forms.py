@@ -45,6 +45,26 @@ class ProductForm(forms.ModelForm):
         return price
 
 
+class ProductCreateForm(ProductForm):
+    """ProductForm + um campo opcional de quantidade inicial em estoque.
+
+    Uma subclasse em vez de adicionar o campo direto no ProductForm
+    porque product_update reutiliza ProductForm - se o campo estivesse
+    lá, apareceria (vazio, sem sentido) também na tela de edição.
+    initial_quantity não é um campo do model Product (vira um
+    StockMovement, criado pela view depois que o produto é salvo) -
+    por isso é um campo solto do form, não algo declarado em Meta.fields.
+    """
+
+    initial_quantity = forms.IntegerField(
+        required=False,
+        min_value=0,
+        initial=0,
+        label='Quantidade inicial em estoque',
+        widget=forms.NumberInput(attrs={'class': 'form-control'}),
+    )
+
+
 class MovementForm(forms.Form):
     """Validates a stock movement before it reaches the service layer.
 

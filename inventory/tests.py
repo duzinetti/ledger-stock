@@ -503,7 +503,7 @@ class MovementCreateViewTestCase(TestCase):
 
         self.assertEqual(self.product.movements.count(), 2)  # 1 do setUp + 1 do POST
         self.assertRedirects(
-            response, reverse('product_detail', args=[self.product.id])
+            response, reverse('product_update', args=[self.product.id])
         )
 
     def test_valid_out_movement_within_stock_creates_stock_movement(self):
@@ -513,7 +513,7 @@ class MovementCreateViewTestCase(TestCase):
 
         self.assertEqual(self.product.movements.count(), 2)
         self.assertRedirects(
-            response, reverse('product_detail', args=[self.product.id])
+            response, reverse('product_update', args=[self.product.id])
         )
 
     def test_invalid_form_data_does_not_create_movement(self):
@@ -530,7 +530,7 @@ class MovementCreateViewTestCase(TestCase):
         }, follow=True)
 
         self.assertRedirects(
-            response, reverse('product_detail', args=[self.product.id])
+            response, reverse('product_update', args=[self.product.id])
         )
         self.assertContains(response, 'Quantidade de saída maior que o estoque disponível')
         self.assertEqual(self.product.movements.count(), 1)
@@ -546,7 +546,7 @@ class MovementCreateViewTestCase(TestCase):
                 'type': 'IN', 'quantity': 5, 'reason': '',
             }, follow=True)
 
-        self.assertRedirects(response, reverse('product_detail', args=[self.product.id]))
+        self.assertRedirects(response, reverse('product_update', args=[self.product.id]))
         self.assertContains(response, 'Quantidade inválida')
 
     def test_invalid_movement_type_error_shows_error_and_redirects_to_detail(self):
@@ -555,7 +555,7 @@ class MovementCreateViewTestCase(TestCase):
                 'type': 'IN', 'quantity': 5, 'reason': '',
             }, follow=True)
 
-        self.assertRedirects(response, reverse('product_detail', args=[self.product.id]))
+        self.assertRedirects(response, reverse('product_update', args=[self.product.id]))
         self.assertContains(response, 'Tipo de movimentação inválido')
 
 

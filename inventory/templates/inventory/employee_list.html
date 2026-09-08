@@ -9,6 +9,7 @@
             <thead>
                 <tr>
                     <th>Usuário</th>
+                    <th>Papel</th>
                     <th>Status</th>
                     <th></th>
                 </tr>
@@ -17,6 +18,7 @@
                 {% for membership in memberships %}
                 <tr>
                     <td>{{ membership.user.username }}</td>
+                    <td>{{ membership.user.groups.all.0.name|default:"—" }}</td>
                     <td>
                         {% if membership.user.is_active %}
                             <span class="badge text-bg-success">Ativo</span>

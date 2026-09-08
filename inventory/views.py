@@ -1,10 +1,13 @@
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
+from django.db import transaction
+from django.db.models import Q
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
-from .forms import MovementForm, ProductForm
+from .forms import MovementForm, ProductCreateForm, ProductForm
 from .models import (
-    Product, 
+    MovementType,
+    Product,
     StockMovement,
     Membership)
 from .services import register_movement as register_movement_service
@@ -35,7 +38,13 @@ def product_list(request):
         company=request.user.membership.company
     ).order_by('name')
     if search_term:
-        products = products.filter(name__icontains=search_term)
+        # Sempre busca por nome; se o termo digitado for só dígitos,
+        # também aceita ele como ID exato (ex.: "12" bate o produto de
+        # nome "12 Pilhas AA" OU o produto de ID 12).
+        query = Q(name__icontains=search_term)
+        if search_term.isdigit():
+            query |= Q(id=search_term)
+        products = products.filter(query)
 
     paginator = Paginator(products, 10)
     paginated_products = paginator.get_page(request.GET.get('page'))
@@ -48,20 +57,40 @@ def product_list(request):
 
 @login_required
 def product_create(request):
-    """Creates a product using ProductForm for server-side validation.
+    """Creates a product using ProductCreateForm for server-side validation.
 
-    Login-gated per PRD §6.4 (write action).
+    Login-gated per PRD §6.4 (write action). Uses ProductCreateForm (not
+    ProductForm) because creation optionally accepts an initial stock
+    quantity - a field that only makes sense once, at creation time, so
+    it lives in a subclass instead of the shared ProductForm used by
+    product_update too.
     """
     if request.method == 'POST':
-        form = ProductForm(request.POST)
+        form = ProductCreateForm(request.POST)
         if form.is_valid():
-            product = form.save(commit=False)
-            product.company = request.user.membership.company
-            product.save()
+            # transaction.atomic() aqui garante que produto + movimento
+            # inicial nascem juntos: se o registro do movimento falhar
+            # por algum motivo, o produto também não fica salvo "no
+            # vácuo" com uma quantidade inicial que o usuário pediu mas
+            # nunca foi de fato registrada.
+            with transaction.atomic():
+                product = form.save(commit=False)
+                product.company = request.user.membership.company
+                product.save()
+
+                initial_quantity = form.cleaned_data.get('initial_quantity')
+                if initial_quantity:
+                    register_movement_service(
+                        product_id=product.id,
+                        movement_type=MovementType.IN,
+                        quantity=initial_quantity,
+                        reason='Estoque inicial',
+                        user=request.user,
+                    )
             messages.success(request, 'Produto cadastrado com sucesso.')
             return redirect('product_list')
     else:
-        form = ProductForm()
+        form = ProductCreateForm()
     return render(request, 'inventory/product_create.html', {'form': form})
 
 
@@ -69,7 +98,14 @@ def product_create(request):
 def product_update(request, product_id):
     """Edits an existing product using ProductForm for server-side validation.
 
-    Login-gated per PRD §6.4 (write action).
+    Login-gated per PRD §6.4 (write action). Also renders a second,
+    independent MovementForm in the same page - Editar passou a
+    concentrar as ações de escrita sobre o produto (dados + estoque),
+    enquanto Ver ficou só leitura. Os dois forms postam pra views
+    diferentes (este e movement_create); não foram fundidos num só
+    porque validam coisas diferentes - editar produto é um ModelForm
+    simples, registrar movimento passa pelo service com
+    select_for_update().
     """
     product = get_object_or_404(Product, id=product_id, company=request.user.membership.company)
 
@@ -82,7 +118,11 @@ def product_update(request, product_id):
     else:
         form = ProductForm(instance=product)
 
-    return render(request, 'inventory/product_update.html', {'product': product, 'form': form})
+    return render(request, 'inventory/product_update.html', {
+        'product': product,
+        'form': form,
+        'movement_form': MovementForm(),
+    })
 
 
 @login_required
@@ -190,13 +230,13 @@ def movement_create(request, product_id):
                     f'Quantidade de saída maior que o estoque disponível '
                     f'({error.available_quantity} unidades).'
                 )
-                return redirect('product_detail', product_id=product.id)
+                return redirect('product_update', product_id=product.id)
             except InactiveProductError:
                 messages.error(
                     request,
                     'Produto inativo e sem estoque - não é possível registrar movimentação.'
                 )
-                return redirect('product_detail', product_id=product.id)
+                return redirect('product_update', product_id=product.id)
             except Product.DoesNotExist:
                 messages.error(
                     request,
@@ -208,16 +248,16 @@ def movement_create(request, product_id):
                     request,
                     'Quantidade inválida - deve ser um número inteiro maior que zero.'
                 )
-                return redirect('product_detail', product_id=product.id)
+                return redirect('product_update', product_id=product.id)
             except InvalidMovementTypeError:
                 messages.error(
                     request,
                     'Tipo de movimentação inválido.'
                 )
-                return redirect('product_detail', product_id=product.id)
+                return redirect('product_update', product_id=product.id)
 
             messages.success(request, 'Movimentação registrada.')
-            return redirect('product_detail', product_id=product.id)
+            return redirect('product_update', product_id=product.id)
     else:
         form = MovementForm()
 
@@ -232,9 +272,13 @@ def employee_list(request):
     Restricted to the Gestor group (#47) - Operador shouldn't see or
     manage other employees' access.
     """
+    # prefetch_related('user__groups') traz os grupos (papéis) de todos
+    # os funcionários numa única query extra, em vez de uma query de
+    # grupo por linha da tabela (N+1) quando o template ler
+    # membership.user.groups.all para mostrar Gestor/Operador.
     memberships = Membership.objects.filter(
         company=request.user.membership.company
-    ).select_related('user').order_by('user__username')
+    ).select_related('user').prefetch_related('user__groups').order_by('user__username')
 
     return render(request, 'inventory/employee_list.html', {
         'memberships': memberships

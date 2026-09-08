@@ -2,7 +2,7 @@
 
 {% block content %}
     <h2 class="mb-4">Editar produto</h2>
-    <form method="post" class="col-12 col-md-6">
+    <form method="post" action="{% url 'product_update' product.id %}" class="col-12 col-md-6 mb-5">
         {% csrf_token %}
         {% for field in form %}
         <div class="mb-3">
@@ -14,5 +14,23 @@
         </div>
         {% endfor %}
         <button type="submit" class="btn btn-primary">Salvar</button>
+    </form>
+
+    <hr class="col-12 col-md-6">
+
+    <h2 class="mb-1 mt-4">Registrar movimentação</h2>
+    <p class="text-muted mb-3">Quantidade atual: <span class="numeric">{{ product.current_quantity }}</span></p>
+    <form method="post" action="{% url 'movement_create' product.id %}" class="col-12 col-md-6">
+        {% csrf_token %}
+        {% for field in movement_form %}
+        <div class="mb-3">
+            <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+            {{ field }}
+            {% if field.errors %}
+                <div class="text-danger small mt-1">{{ field.errors|striptags }}</div>
+            {% endif %}
+        </div>
+        {% endfor %}
+        <button type="submit" class="btn btn-success">Registrar</button>
     </form>
 {% endblock %}
