@@ -31,6 +31,9 @@ class ProductForm(forms.ModelForm):
             'price': 'Preço',
             'minimum_quantity': 'Quantidade mínima',
         }
+        help_texts = {
+            'category': 'Ex.: Bebidas, Limpeza, Papelaria',
+        }
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'category': forms.TextInput(attrs={'class': 'form-control'}),
@@ -61,6 +64,7 @@ class ProductCreateForm(ProductForm):
         min_value=0,
         initial=0,
         label='Quantidade inicial em estoque',
+        help_text='Deixe em branco se o produto ainda não tem estoque.',
         widget=forms.NumberInput(attrs={'class': 'form-control'}),
     )
 

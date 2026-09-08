@@ -33,6 +33,12 @@
             --accent-tint: #3a3d8a;
             --create: #23a55a;
             --create-hover: #1e8e4d;
+            /* Alias pro vermelho de perigo/inativação que o próprio
+               Bootstrap já define pro tema escuro - não troca a cor,
+               só dá um nome de token nosso (--danger) igual --accent e
+               --create já têm, em vez de deixar só o padrão cru do
+               Bootstrap sem nome no nosso sistema. */
+            --danger: var(--bs-danger);
 
             --bs-body-bg: var(--canvas);
             --bs-body-color: var(--ink-soft);
@@ -199,6 +205,29 @@
             color: var(--ink-soft);
             border-color: var(--hairline);
         }
+
+        /* Cartões: usados pra separar visualmente ações diferentes numa
+           mesma página (ex.: "editar produto" vs. "registrar
+           movimentação" em product_update.html) - sem isso, o card do
+           Bootstrap herda o fundo do body e some no tema escuro. */
+        .card {
+            background-color: var(--surface);
+            border-color: var(--hairline);
+            border-radius: 12px;
+        }
+        .card-header {
+            background-color: var(--surface-deep);
+            border-bottom-color: var(--hairline);
+            font-family: 'Sora', 'Inter', sans-serif;
+            font-weight: 600;
+            color: var(--ink);
+        }
+
+        .input-group-text {
+            background-color: var(--surface-deep);
+            border-color: var(--hairline);
+            color: var(--ink-faint);
+        }
     </style>
     {% block extra_head %}{% endblock %}
 </head>
@@ -206,9 +235,10 @@
     <nav class="navbar navbar-expand-md">
         <div class="container">
             <a class="navbar-brand" href="{% url 'product_list' %}">
-                <svg class="brand-mark" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-                    <rect x="3" y="12" width="13" height="17" rx="3" fill="#5e6ad2"/>
-                    <rect x="16" y="3" width="13" height="17" rx="3" fill="#f2f3f5"/>
+                <svg class="brand-mark" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                    <rect width="24" height="24" rx="7" fill="#5e6ad2"/>
+                    <path d="M12 5l6 3.2v7.6L12 19l-6-3.2V8.2L12 5z" fill="none" stroke="#f2f3f5" stroke-width="1.6" stroke-linejoin="round"/>
+                    <path d="M12 5v6.5M12 11.5l6-3.2M12 11.5l-6-3.2" stroke="#f2f3f5" stroke-width="1.6" stroke-linejoin="round" fill="none"/>
                 </svg>
                 Gerenciador de Estoque
             </a>
@@ -220,17 +250,32 @@
             <div class="collapse navbar-collapse" id="navMenu">
                 <ul class="navbar-nav me-auto">
                     <li class="nav-item">
-                        <a class="nav-link {% if request.resolver_match.url_name == 'product_list' %}active{% endif %}"
-                           href="{% url 'product_list' %}">Produtos</a>
+                        <a class="nav-link d-flex align-items-center gap-2 {% if request.resolver_match.url_name == 'product_list' %}active{% endif %}"
+                           href="{% url 'product_list' %}">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="flex-shrink-0">
+                                <path d="M21 8L12 3 3 8v8l9 5 9-5V8z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/>
+                            </svg>
+                            Produtos
+                        </a>
                     </li>
                     {% if is_gestor %}
                     <li class="nav-item">
-                        <a class="nav-link {% if request.resolver_match.url_name == 'employee_list' %}active{% endif %}"
-                           href="{% url 'employee_list' %}">Funcionários</a>
+                        <a class="nav-link d-flex align-items-center gap-2 {% if request.resolver_match.url_name == 'employee_list' %}active{% endif %}"
+                           href="{% url 'employee_list' %}">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="flex-shrink-0">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                            </svg>
+                            Funcionários
+                        </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.resolver_match.url_name == 'product_inactive_list' %}active{% endif %}"
-                           href="{% url 'product_inactive_list' %}">Produtos inativos</a>
+                        <a class="nav-link d-flex align-items-center gap-2 {% if request.resolver_match.url_name == 'product_inactive_list' %}active{% endif %}"
+                           href="{% url 'product_inactive_list' %}">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="flex-shrink-0">
+                                <polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/>
+                            </svg>
+                            Produtos inativos
+                        </a>
                     </li>
                     {% endif %}
                 </ul>
@@ -239,12 +284,22 @@
                     <span class="navbar-text me-2">{{ user.username }}</span>
                     <form method="post" action="{% url 'logout' %}">
                         {% csrf_token %}
-                        <button type="submit" class="btn btn-outline-secondary btn-sm">Sair</button>
+                        <button type="submit" class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>
+                            </svg>
+                            Sair
+                        </button>
                     </form>
                 </div>
             </div>
             {% else %}
-            <a href="{% url 'login' %}" class="btn btn-primary btn-sm">Entrar</a>
+            <a href="{% url 'login' %}" class="btn btn-primary btn-sm d-flex align-items-center gap-1">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/>
+                </svg>
+                Entrar
+            </a>
             {% endif %}
         </div>
     </nav>
@@ -252,9 +307,18 @@
     <main class="container py-4">
         {% if messages %}
             {% for message in messages %}
-                <div class="alert {% if message.tags == 'error' %}alert-danger{% else %}alert-success{% endif %} alert-dismissible fade show" role="alert">
-                    {{ message }}
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert" aria-label="Fechar"></button>
+                <div class="alert {% if message.tags == 'error' %}alert-danger{% else %}alert-success{% endif %} alert-dismissible fade show d-flex align-items-center gap-2" role="alert">
+                    {% if message.tags == 'error' %}
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="flex-shrink-0">
+                            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+                        </svg>
+                    {% else %}
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="flex-shrink-0">
+                            <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>
+                        </svg>
+                    {% endif %}
+                    <div>{{ message }}</div>
+                    <button type="button" class="btn-close btn-close-white ms-auto" data-bs-dismiss="alert" aria-label="Fechar"></button>
                 </div>
             {% endfor %}
         {% endif %}
@@ -265,5 +329,32 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
             integrity="sha512-7Pi/otdlbbCR+LnW+F7PwFcSDJOuUJB3OxtEHbg4vSMvzvJjde4Po1v4BR9Gdc9aXNUNFVUY+SK51wWT8WF0Gg=="
             crossorigin="anonymous"></script>
+    <script>
+        // Desabilita o botão de submit e troca o texto por "Aguarde..."
+        // assim que um form é enviado - evita clique duplo (em wifi de
+        // loja, uma requisição pode demorar) e dá alguma confirmação
+        // visual de que o clique funcionou. Texto genérico "Aguarde..."
+        // em vez de "Salvando..."/"Registrando..." porque um único
+        // listener cobre todo formulário POST da aplicação sem precisar
+        // saber o verbo de cada um.
+        document.addEventListener('submit', function (event) {
+            var form = event.target;
+            if (form.method.toLowerCase() !== 'post') return;
+            var submitBtn = form.querySelector('button[type="submit"]');
+            if (!submitBtn || submitBtn.disabled) return;
+            submitBtn.dataset.originalText = submitBtn.textContent;
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Aguarde...';
+        });
+        // Se o usuário voltar pra essa página pelo botão "voltar" do
+        // navegador (bfcache), o browser pode restaurar o DOM com o
+        // botão ainda desabilitado de uma submissão anterior.
+        window.addEventListener('pageshow', function () {
+            document.querySelectorAll('button[type="submit"][disabled]').forEach(function (btn) {
+                btn.disabled = false;
+                if (btn.dataset.originalText) btn.textContent = btn.dataset.originalText;
+            });
+        });
+    </script>
 </body>
 </html>

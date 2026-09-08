@@ -210,58 +210,69 @@ def movement_create(request, product_id):
     Login-gated per PRD §6.4. Delegates the actual quantity/locking
     logic to services.register_movement so this view and any future
     API share one source of truth for the concurrency-safety rule.
+
+    On a business-rule error (insufficient stock, inactive product...)
+    this re-renders product_update.html with the error attached to the
+    form via form.add_error(), instead of a message + redirect - that
+    way the user sees the error next to the field, on the same page
+    where the embedded movement form lives, without losing what they
+    typed (Nielsen heuristic #9: errors should appear near the field
+    that caused them, not as a banner on a fresh page). The one
+    exception is Product.DoesNotExist: there is no page to return the
+    user to if the product itself is gone, so that case keeps the
+    message + redirect to product_list.
     """
     product = get_object_or_404(Product, id=product_id, company=request.user.membership.company)
 
-    if request.method == 'POST':
-        form = MovementForm(request.POST)
-        if form.is_valid():
-            try:
-                register_movement_service(
-                    product_id=product.id,
-                    movement_type=form.cleaned_data['type'],
-                    quantity=form.cleaned_data['quantity'],
-                    reason=form.cleaned_data['reason'],
-                    user=request.user,
-                )
-            except InsufficientStockError as error:
-                messages.error(
-                    request,
-                    f'Quantidade de saída maior que o estoque disponível '
-                    f'({error.available_quantity} unidades).'
-                )
-                return redirect('product_update', product_id=product.id)
-            except InactiveProductError:
-                messages.error(
-                    request,
-                    'Produto inativo e sem estoque - não é possível registrar movimentação.'
-                )
-                return redirect('product_update', product_id=product.id)
-            except Product.DoesNotExist:
-                messages.error(
-                    request,
-                    'Este produto não existe mais - não foi possível registrar a movimentação.'
-                )
-                return redirect('product_list')
-            except InvalidQuantityError:
-                messages.error(
-                    request,
-                    'Quantidade inválida - deve ser um número inteiro maior que zero.'
-                )
-                return redirect('product_update', product_id=product.id)
-            except InvalidMovementTypeError:
-                messages.error(
-                    request,
-                    'Tipo de movimentação inválido.'
-                )
-                return redirect('product_update', product_id=product.id)
+    if request.method != 'POST':
+        return render(request, 'inventory/movement_create.html', {
+            'product': product,
+            'form': MovementForm(),
+        })
 
+    form = MovementForm(request.POST)
+    if form.is_valid():
+        try:
+            register_movement_service(
+                product_id=product.id,
+                movement_type=form.cleaned_data['type'],
+                quantity=form.cleaned_data['quantity'],
+                reason=form.cleaned_data['reason'],
+                user=request.user,
+            )
+        except InsufficientStockError as error:
+            form.add_error(
+                'quantity',
+                f'Quantidade de saída maior que o estoque disponível '
+                f'({error.available_quantity} unidades).'
+            )
+        except InactiveProductError:
+            form.add_error(
+                None,
+                'Produto inativo e sem estoque - não é possível registrar movimentação.'
+            )
+        except Product.DoesNotExist:
+            messages.error(
+                request,
+                'Este produto não existe mais - não foi possível registrar a movimentação.'
+            )
+            return redirect('product_list')
+        except InvalidQuantityError:
+            form.add_error('quantity', 'Quantidade inválida - deve ser um número inteiro maior que zero.')
+        except InvalidMovementTypeError:
+            form.add_error('type', 'Tipo de movimentação inválido.')
+        else:
             messages.success(request, 'Movimentação registrada.')
             return redirect('product_update', product_id=product.id)
-    else:
-        form = MovementForm()
 
-    return render(request, 'inventory/movement_create.html', {'product': product, 'form': form})
+    # form inválido (validação do Django) OU um erro de regra de
+    # negócio foi anexado ao form acima - nos dois casos, volta pra
+    # product_update.html com o form da movimentação preenchido e com erro.
+    return render(request, 'inventory/product_update.html', {
+        'product': product,
+        'form': ProductForm(instance=product),
+        'movement_form': form,
+    })
 
 
 @login_required
