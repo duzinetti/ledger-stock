@@ -1,12 +1,23 @@
 {% extends 'inventory/base.html' %}
 
 {% block content %}
-    <h2>Registrar movimentação - {{ product.name }}</h2>
-    <p>Quantidade atual: {{ product.current_quantity }}</p>
+    <h2 class="mb-1">Registrar movimentação - {{ product.name }}</h2>
+    <p class="text-muted mb-4">Quantidade atual: <span class="numeric">{{ product.current_quantity }}</span></p>
 
-    <form method="post">
+    <form method="post" class="col-12 col-md-6">
         {% csrf_token %}
-        {{ form.as_p }}
-        <button type="submit">Registrar</button>
+        {% for field in form %}
+        <div class="mb-3">
+            <label for="{{ field.id_for_label }}" class="form-label">{{ field.label }}</label>
+            {{ field }}
+            {% if field.help_text %}
+                <div class="form-text">{{ field.help_text }}</div>
+            {% endif %}
+            {% if field.errors %}
+                <div class="text-danger small mt-1">{{ field.errors|striptags }}</div>
+            {% endif %}
+        </div>
+        {% endfor %}
+        <button type="submit" class="btn btn-success">Registrar</button>
     </form>
 {% endblock %}

@@ -503,7 +503,7 @@ class MovementCreateViewTestCase(TestCase):
 
         self.assertEqual(self.product.movements.count(), 2)  # 1 do setUp + 1 do POST
         self.assertRedirects(
-            response, reverse('product_detail', args=[self.product.id])
+            response, reverse('product_update', args=[self.product.id])
         )
 
     def test_valid_out_movement_within_stock_creates_stock_movement(self):
@@ -513,7 +513,7 @@ class MovementCreateViewTestCase(TestCase):
 
         self.assertEqual(self.product.movements.count(), 2)
         self.assertRedirects(
-            response, reverse('product_detail', args=[self.product.id])
+            response, reverse('product_update', args=[self.product.id])
         )
 
     def test_invalid_form_data_does_not_create_movement(self):
@@ -524,14 +524,14 @@ class MovementCreateViewTestCase(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(self.product.movements.count(), 1)
 
-    def test_insufficient_stock_shows_error_and_redirects_to_detail(self):
+    def test_insufficient_stock_shows_inline_error_on_product_update(self):
         response = self.client.post(self.url, {
             'type': 'OUT', 'quantity': 999, 'reason': '',
-        }, follow=True)
+        })
 
-        self.assertRedirects(
-            response, reverse('product_detail', args=[self.product.id])
-        )
+        # Não redireciona mais - o erro vira form.add_error() e a
+        # própria view já renderiza product_update.html na resposta.
+        self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Quantidade de saída maior que o estoque disponível')
         self.assertEqual(self.product.movements.count(), 1)
 
@@ -540,23 +540,32 @@ class MovementCreateViewTestCase(TestCase):
         response = self.client.get(self.url)
         self.assertRedirects(response, f"{reverse('login')}?next={self.url}")
 
-    def test_invalid_quantity_error_shows_error_and_redirects_to_detail(self):
+    def test_invalid_quantity_error_shows_inline_error_on_product_update(self):
         with patch('inventory.views.register_movement_service', side_effect=InvalidQuantityError(-5)):
             response = self.client.post(self.url, {
                 'type': 'IN', 'quantity': 5, 'reason': '',
-            }, follow=True)
+            })
 
-        self.assertRedirects(response, reverse('product_detail', args=[self.product.id]))
+        self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Quantidade inválida')
 
-    def test_invalid_movement_type_error_shows_error_and_redirects_to_detail(self):
+    def test_invalid_movement_type_error_shows_inline_error_on_product_update(self):
         with patch('inventory.views.register_movement_service', side_effect=InvalidMovementTypeError('XX')):
             response = self.client.post(self.url, {
                 'type': 'IN', 'quantity': 5, 'reason': '',
-            }, follow=True)
+            })
 
-        self.assertRedirects(response, reverse('product_detail', args=[self.product.id]))
+        self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Tipo de movimentação inválido')
+
+    def test_inactive_product_error_shows_inline_error_on_product_update(self):
+        with patch('inventory.views.register_movement_service', side_effect=InactiveProductError(self.product)):
+            response = self.client.post(self.url, {
+                'type': 'IN', 'quantity': 5, 'reason': '',
+            })
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Produto inativo e sem estoque')
 
 
 

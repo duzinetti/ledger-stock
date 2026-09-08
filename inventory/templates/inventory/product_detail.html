@@ -1,47 +1,81 @@
 {% extends 'inventory/base.html' %}
 
 {% block content %}
-    <h2>{{ product.name }}{% if not product.active %} (inativo){% endif %}</h2>
-    <p>Categoria: {{ product.category }}</p>
-    <p>Preço: {{ product.price }}</p>
-    <p>Quantidade atual: {{ product.current_quantity }}{% if product.low_stock %} (abaixo do mínimo){% endif %}</p>
-    <p>Quantidade mínima: {{ product.minimum_quantity }}</p>
-
-    <p>
-        <a href="{% url 'movement_create' product.id %}">Registrar movimentação</a>
-        |
-        <a href="{% url 'product_update' product.id %}">Editar produto</a>
-        |
-        <a href="{% url 'product_delete' product.id %}">Inativar produto</a>
-    </p>
-
-    <h3>Histórico</h3>
-    <table border="1">
-        <tr>
-            <th>Tipo</th>
-            <th>Quantidade</th>
-            <th>Data</th>
-            <th>Motivo</th>
-        </tr>
-        {% for movement in movements %}
-        <tr>
-            <td>{{ movement.get_type_display }}</td>
-            <td>{{ movement.quantity }}</td>
-            <td>{{ movement.date }}</td>
-            <td>{{ movement.reason }}</td>
-        </tr>
-        {% empty %}
-        <tr><td colspan="4">Nenhuma movimentação registrada.</td></tr>
-        {% endfor %}
-    </table>
-
-    <div>
-        {% if movements.has_previous %}
-            <a href="?page={{ movements.previous_page_number }}">Anterior</a>
-        {% endif %}
-        Página {{ movements.number }} de {{ movements.paginator.num_pages }}
-        {% if movements.has_next %}
-            <a href="?page={{ movements.next_page_number }}">Próxima</a>
-        {% endif %}
+    <div class="d-flex align-items-center gap-2 mb-3">
+        <h2 class="mb-0">{{ product.name }}</h2>
+        {% if not product.active %}<span class="badge text-bg-secondary">inativo</span>{% endif %}
     </div>
+
+    <div class="row mb-4 g-3">
+        <div class="col-6 col-md-3">
+            <div class="text-muted small">Categoria</div>
+            <div>{{ product.category }}</div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="text-muted small">Preço</div>
+            <div class="numeric">R$ {{ product.price }}</div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="text-muted small">Quantidade atual</div>
+            <div class="numeric">
+                {{ product.current_quantity }}
+                {% if product.low_stock %}<span class="badge text-bg-warning">baixo</span>{% endif %}
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="text-muted small">Quantidade mínima</div>
+            <div class="numeric">{{ product.minimum_quantity }}</div>
+        </div>
+    </div>
+
+    <div class="d-flex gap-2 mb-4">
+        <a href="{% url 'product_update' product.id %}" class="btn btn-outline-secondary">Editar produto</a>
+        <a href="{% url 'product_delete' product.id %}" class="btn btn-outline-danger">Inativar produto</a>
+    </div>
+
+    <h3 class="h5">Histórico</h3>
+    {% if movements %}
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Tipo</th>
+                    <th class="numeric">Quantidade</th>
+                    <th>Data</th>
+                    <th>Motivo</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for movement in movements %}
+                <tr>
+                    <td>{{ movement.get_type_display }}</td>
+                    <td class="numeric">{{ movement.quantity }}</td>
+                    <td>{{ movement.date }}</td>
+                    <td>{{ movement.reason }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-center text-muted py-4">Nenhuma movimentação registrada.</p>
+    {% endif %}
+
+    {% if movements.has_other_pages %}
+    <nav aria-label="Paginação de movimentações">
+        <ul class="pagination">
+            {% if movements.has_previous %}
+                <li class="page-item"><a class="page-link" href="?page={{ movements.previous_page_number }}">Anterior</a></li>
+            {% else %}
+                <li class="page-item disabled"><span class="page-link">Anterior</span></li>
+            {% endif %}
+            <li class="page-item disabled"><span class="page-link">Página {{ movements.number }} de {{ movements.paginator.num_pages }}</span></li>
+            {% if movements.has_next %}
+                <li class="page-item"><a class="page-link" href="?page={{ movements.next_page_number }}">Próxima</a></li>
+            {% else %}
+                <li class="page-item disabled"><span class="page-link">Próxima</span></li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
 {% endblock %}

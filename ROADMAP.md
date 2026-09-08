@@ -66,15 +66,19 @@ de estoque, o funcionário opera sem fricção, com segurança básica.
 ### MVP.4 — Alerta de estoque baixo na interface
 - [x] Já implementado (property `estoque_baixo`, exibido na listagem)
 
-### MVP.4.5 — Estilização das telas (decisão 2026-09-04)
-Adiantado do V2 pra antes do deploy - hoje as telas são HTML cru
-(`<table border="1">`, zero CSS). Decisão do product owner: não faz
+### MVP.4.5 — Estilização das telas (decisão 2026-09-04) ✅
+Adiantado do V2 pra antes do deploy - as telas eram HTML cru
+(`<table border="1">`, zero CSS). Decisão do product owner: não fazia
 sentido considerar o MVP "usável por um comércio real" (critério de
 conclusão abaixo) com telas nesse estado, mesmo que funcionalmente
-completas. Ver item correspondente em V2 (`django-crispy-forms`,
-Bootstrap/Tailwind) - a biblioteca a usar ainda não foi decidida.
-- [ ] Escolher abordagem de estilização (Bootstrap/Tailwind/outro)
-- [ ] Aplicar em todas as telas existentes
+completas.
+- [x] Escolher abordagem de estilização — Bootstrap 5.3 via CDN (sem
+      build tool), tema escuro estilo Discord, acento azul-roxeado e
+      verde semântico reservado pra ações de criação
+- [x] Aplicar em todas as telas existentes, incluindo cabeçalho com
+      identidade visual própria (logo, ícones) e uma auditoria de UX
+      (heurísticas de Nielsen, feedback de formulário, erro exibido
+      junto ao campo em vez de mensagem solta)
 
 ### MVP.5 — Deploy
 - [ ] HTTPS obrigatório, variáveis sensíveis fora do código
@@ -152,7 +156,7 @@ Alinhado à Seção 5 do PRD.
 | python-decouple | MVP.2 | Variáveis de ambiente |
 | mysqlclient / psycopg2 | MVP.2 | Driver do banco de produção |
 | gunicorn / whitenoise | MVP.5 | Deploy |
-| django-crispy-forms, Bootstrap | V2 | Estilização |
+| Bootstrap 5.3 (CDN) | MVP.4.5 | Estilização (django-crispy-forms avaliado e descartado — forms simples o bastante pra não precisar) |
 | django-jazzmin | V2 | Reskin do admin |
 | Chart.js | V2 | Gráficos do dashboard |
 | djangorestframework + simplejwt + drf-spectacular | V2 | API |
@@ -166,8 +170,7 @@ Alinhado à Seção 5 do PRD.
 
 ## Próxima ação recomendada
 
-Os dois bloqueios estão resolvidos e a MVP.2 está completa (Postgres/
-Neon + `python-decouple`, PR #53). Falta a MVP.4.5 (estilização das
-telas, hoje HTML cru) e a MVP.5 (deploy: HTTPS, Render, checklist de
-segurança mínima) pra fechar o MVP - nessa ordem, telas antes de
-publicar.
+Os dois bloqueios estão resolvidos, a MVP.2 está completa (Postgres/
+Neon + `python-decouple`, PR #53) e a MVP.4.5 está completa
+(estilização das telas). Falta só a MVP.5 (deploy: HTTPS, Render,
+checklist de segurança mínima) pra fechar o MVP.

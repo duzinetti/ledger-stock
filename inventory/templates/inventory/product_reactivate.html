@@ -1,12 +1,14 @@
 {% extends 'inventory/base.html' %}
 
 {% block content %}
-    <h2>Reativar produto</h2>
-    <p>Tem certeza que deseja reativar <strong>{{ product.name }}</strong>? Ele voltará a aparecer na listagem de produtos.</p>
+    <div class="col-12 col-md-6">
+        <h2 class="mb-3">Reativar produto</h2>
+        <p class="text-muted">Tem certeza que deseja reativar <strong>{{ product.name }}</strong>? Ele voltará a aparecer na listagem de produtos.</p>
 
-    <form method="post">
-        {% csrf_token %}
-        <button type="submit">Confirmar reativação</button>
-        <a href="{% url 'product_inactive_list' %}">Cancelar</a>
-    </form>
+        <form method="post" class="d-flex gap-2">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-success">Confirmar reativação</button>
+            <a href="{% url 'product_inactive_list' %}" class="btn btn-outline-secondary">Cancelar</a>
+        </form>
+    </div>
 {% endblock %}
