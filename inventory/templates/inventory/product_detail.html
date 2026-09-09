@@ -1,5 +1,7 @@
 {% extends 'inventory/base.html' %}
 
+{% block title %}{{ product.name }} · Gerenciador de Estoque{% endblock %}
+
 {% block content %}
     <div class="d-flex align-items-center gap-2 mb-3">
         <h2 class="mb-0">{{ product.name }}</h2>

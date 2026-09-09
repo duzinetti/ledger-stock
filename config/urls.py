@@ -2,10 +2,12 @@ from django.urls import path, include
 from django.contrib.auth.views import LoginView
 from inventory.admin import admin_site
 from inventory.forms import StyledAuthenticationForm
-from inventory.views import StyledPasswordChangeView
+from inventory.views import StyledPasswordChangeView, privacy_policy, robots_txt
 
 urlpatterns = [
     path('admin/', admin_site.urls),
+    path('robots.txt', robots_txt, name='robots_txt'),
+    path('privacidade/', privacy_policy, name='privacy_policy'),
     # Overrides just login/password-change (matched before the include
     # below) to use styled forms/views - Bootstrap classes, and (for
     # password_change) clearing must_change_password on success. logout

@@ -6,6 +6,7 @@ from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
+from django.http import HttpResponse
 from .forms import EmployeeCreateForm, MovementForm, ProductCreateForm, ProductForm, StyledPasswordChangeForm
 from .models import (
     MovementType,
@@ -21,6 +22,23 @@ from .services import (
     InvalidMovementTypeError
 )
 from .decorators import gestor_required
+
+
+def robots_txt(request):
+    """Bloqueia indexação por robôs de busca - o app inteiro fica atrás
+    de login (nenhuma página é realmente pública), mas isso é defesa em
+    profundidade: não custa nada garantir que um buscador nunca tente
+    listar "/produtos/" ou dados de uma empresa cliente.
+    """
+    return HttpResponse('User-agent: *\nDisallow: /\n', content_type='text/plain')
+
+
+def privacy_policy(request):
+    """Política de privacidade - única página do app que não exige
+    login, de propósito: alguém precisa poder ler isso antes de decidir
+    usar o sistema, não só depois de já ter uma conta.
+    """
+    return render(request, 'inventory/privacy_policy.html')
 
 
 @login_required
