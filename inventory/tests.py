@@ -10,6 +10,8 @@ from .forms import MovementForm, ProductForm
 from .models import Company, Membership, Product, StockMovement
 from .services import (
     register_movement,
+    create_employee,
+    reset_employee_password,
     InactiveProductError,
     InsufficientStockError,
     InvalidMovementTypeError,
@@ -734,6 +736,160 @@ class EmployeeManagementTestCase(TestCase):
 
         logged_in = self.client.login(username='operador_a', password='senha-teste-123')
         self.assertFalse(logged_in)
+
+
+class CreateEmployeeServiceTestCase(TestCase):
+    """Testa create_employee() direto na service layer, sem passar pela
+    view - mesmo padrão de RegisterMovementServiceTestCase."""
+
+    def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
+
+    def test_creates_user_group_and_membership(self):
+        user, temp_password = create_employee(self.company, 'novo_operador', 'Operador')
+
+        self.assertTrue(User.objects.filter(username='novo_operador').exists())
+        self.assertTrue(user.groups.filter(name='Operador').exists())
+        self.assertEqual(user.membership.company, self.company)
+        self.assertTrue(user.membership.must_change_password)
+        # a senha retornada precisa ser a senha de verdade do usuário -
+        # check_password confirma contra o hash salvo
+        self.assertTrue(user.check_password(temp_password))
+
+    def test_generated_passwords_are_not_predictable(self):
+        # secrets, não random - duas chamadas não podem gerar a mesma senha
+        _, password_1 = create_employee(self.company, 'user1', 'Operador')
+        _, password_2 = create_employee(self.company, 'user2', 'Operador')
+        self.assertNotEqual(password_1, password_2)
+
+
+class EmployeeCreateViewTestCase(TestCase):
+    """Covers the Gestor-facing "cadastrar funcionário" flow - a
+    funcionalidade que faltava (só existiam toggle/desativar, nada
+    criava um funcionário novo pelo próprio sistema)."""
+
+    def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
+        gestor_group = Group.objects.get(name='Gestor')
+        self.gestor = User.objects.create_user(username='gestor', password='senha-teste-123')
+        self.gestor.groups.add(gestor_group)
+        Membership.objects.create(user=self.gestor, company=self.company)
+        self.client.force_login(self.gestor)
+        self.url = reverse('employee_create')
+
+    def test_operador_cannot_access(self):
+        operador = User.objects.create_user(username='operador', password='senha-teste-123')
+        Membership.objects.create(user=operador, company=self.company)
+        self.client.force_login(operador)
+
+        response = self.client.post(self.url, {'username': 'novo', 'role': 'Operador'})
+        self.assertEqual(response.status_code, 403)
+
+    def test_valid_submission_creates_employee_and_shows_password_once(self):
+        response = self.client.post(self.url, {'username': 'joana', 'role': 'Gestor'})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'inventory/employee_create_done.html')
+        self.assertContains(response, 'joana')
+
+        new_user = User.objects.get(username='joana')
+        self.assertTrue(new_user.groups.filter(name='Gestor').exists())
+        self.assertEqual(new_user.membership.company, self.company)
+
+    def test_duplicate_username_shows_form_error_and_creates_nothing(self):
+        User.objects.create_user(username='joana', password='outra-senha')
+
+        response = self.client.post(self.url, {'username': 'joana', 'role': 'Operador'})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Já existe um usuário com esse nome.')
+        # continua existindo só o User original, sem Membership associado
+        self.assertFalse(Membership.objects.filter(user__username='joana').exists())
+
+
+class EmployeeResetPasswordTestCase(TestCase):
+    """Covers o "esqueci minha senha" sem infraestrutura de e-mail: o
+    Gestor reseta a senha do funcionário manualmente."""
+
+    def setUp(self):
+        self.company_a = Company.objects.create(name='Empresa A')
+        self.company_b = Company.objects.create(name='Empresa B')
+        gestor_group = Group.objects.get(name='Gestor')
+
+        self.gestor = User.objects.create_user(username='gestor_a', password='senha-teste-123')
+        self.gestor.groups.add(gestor_group)
+        self.gestor_membership = Membership.objects.create(user=self.gestor, company=self.company_a)
+
+        self.operador = User.objects.create_user(username='operador_a', password='senha-antiga')
+        self.operador_membership = Membership.objects.create(user=self.operador, company=self.company_a)
+
+        other_operador = User.objects.create_user(username='operador_b', password='senha-teste-123')
+        self.other_membership = Membership.objects.create(user=other_operador, company=self.company_b)
+
+        self.client.force_login(self.gestor)
+
+    def test_gestor_cannot_reset_own_password_here(self):
+        response = self.client.post(
+            reverse('employee_reset_password', args=[self.gestor_membership.id])
+        )
+        self.assertRedirects(response, reverse('employee_list'))
+
+    def test_cannot_reset_password_of_other_companys_employee(self):
+        response = self.client.post(
+            reverse('employee_reset_password', args=[self.other_membership.id])
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_resets_password_and_forces_change_on_next_login(self):
+        response = self.client.post(
+            reverse('employee_reset_password', args=[self.operador_membership.id])
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'inventory/employee_create_done.html')
+
+        self.operador.refresh_from_db()
+        self.operador_membership.refresh_from_db()
+        self.assertFalse(self.operador.check_password('senha-antiga'))
+        self.assertTrue(self.operador_membership.must_change_password)
+
+
+class ForcePasswordChangeMiddlewareTestCase(TestCase):
+    """Covers o middleware que obriga troca de senha antes de liberar
+    qualquer outra tela, e que a troca bem-sucedida desliga a flag -
+    sem isso a pessoa ficaria presa na tela de troca pra sempre."""
+
+    def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
+        self.user = User.objects.create_user(username='funcionario', password='temp-senha-123')
+        self.membership = Membership.objects.create(
+            user=self.user, company=self.company, must_change_password=True
+        )
+        self.client.force_login(self.user)
+
+    def test_redirected_away_from_any_other_page(self):
+        response = self.client.get(reverse('product_list'))
+        self.assertRedirects(response, reverse('password_change'))
+
+    def test_password_change_and_logout_pages_stay_reachable(self):
+        response = self.client.get(reverse('password_change'))
+        self.assertEqual(response.status_code, 200)
+
+    def test_successful_password_change_clears_flag_logs_out_and_redirects_to_login(self):
+        response = self.client.post(reverse('password_change'), {
+            'old_password': 'temp-senha-123',
+            'new_password1': 'nova-senha-forte-456',
+            'new_password2': 'nova-senha-forte-456',
+        })
+        self.assertRedirects(response, reverse('login'))
+
+        self.membership.refresh_from_db()
+        self.assertFalse(self.membership.must_change_password)
+
+        # a sessão antiga foi encerrada - a mesma senha temporária não
+        # funciona mais, e a senha nova sim
+        self.assertFalse(self.client.login(username='funcionario', password='temp-senha-123'))
+        self.assertTrue(self.client.login(username='funcionario', password='nova-senha-forte-456'))
 
 
 class ProductReactivationTestCase(TestCase):

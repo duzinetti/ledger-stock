@@ -1,0 +1,31 @@
+{% extends 'inventory/base.html' %}
+
+{% block content %}
+    <div class="col-12 col-md-6 mx-auto">
+        <h2 class="mb-3">Senha temporária gerada</h2>
+
+        <div class="alert alert-danger d-flex align-items-center gap-2">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="flex-shrink-0">
+                <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+            </svg>
+            <div>Essa senha só aparece uma vez. Copie e repasse agora para <strong>{{ created_user.username }}</strong> - ela não vai aparecer de novo em nenhuma tela.</div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="mb-2">
+                    <div class="text-muted small">Usuário</div>
+                    <div class="numeric fs-5">{{ created_user.username }}</div>
+                </div>
+                <div>
+                    <div class="text-muted small">Senha temporária</div>
+                    <div class="numeric fs-5">{{ temp_password }}</div>
+                </div>
+            </div>
+        </div>
+
+        <p class="text-muted">No primeiro login, o sistema vai pedir para trocar essa senha antes de liberar qualquer tela.</p>
+
+        <a href="{% url 'employee_list' %}" class="btn btn-primary">Voltar para funcionários</a>
+    </div>
+{% endblock %}

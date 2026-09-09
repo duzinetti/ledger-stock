@@ -282,6 +282,7 @@
                 <div class="d-flex align-items-center gap-2">
                     <span class="avatar-circle">{{ user.username|slice:":2"|upper }}</span>
                     <span class="navbar-text me-2">{{ user.username }}</span>
+                    <a href="{% url 'password_change' %}" class="btn btn-outline-secondary btn-sm">Trocar senha</a>
                     <form method="post" action="{% url 'logout' %}">
                         {% csrf_token %}
                         <button type="submit" class="btn btn-outline-secondary btn-sm d-flex align-items-center gap-1">
