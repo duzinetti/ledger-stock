@@ -472,3 +472,20 @@ sistema está resolvendo a dor real (confiabilidade do número).
      instalado" é resolvido depois via PWA (`manifest.json` + service
      worker) sem abrir mão do backend compartilhado - item V2, não
      bloqueia MVP.
+
+7. ~~**Ativar Row-Level Security (RLS) do Postgres como reforço do
+   isolamento multi-tenant?**~~ — **Resolvido (2026-09-09): documentar
+   para depois, não implementar agora.** Justificativa: hoje o
+   isolamento entre empresas já é garantido explicitamente na camada
+   de aplicação (todo lookup de objeto específico filtra por
+   `empresa`/`Membership`, ver item 1 acima) — RLS seria uma segunda
+   camada de defesa no próprio banco, útil caso um bug futuro na
+   aplicação esqueça de filtrar por empresa, mas tem custo real de
+   complexidade: exige configurar uma variável de sessão do Postgres
+   (`SET LOCAL`) a cada request amarrada ao usuário logado, testar
+   esse comportamento, e manter as duas camadas de regra (app +
+   banco) sincronizadas. Sem um incidente real que justifique, e num
+   projeto de aprendizado individual com dois pilotos, o custo não
+   compensa agora — fica registrado como item de hardening futuro
+   (ver ROADMAP.md, seção Later) para revisitar se o número de
+   empresas/clientes reais crescer.
