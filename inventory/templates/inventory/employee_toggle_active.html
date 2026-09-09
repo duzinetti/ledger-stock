@@ -1,7 +1,7 @@
 {% extends 'inventory/base.html' %}
 
 {% block content %}
-    <div class="col-12 col-md-6">
+    <div class="col-12 col-md-6 mx-auto">
         {% if membership.user.is_active %}
             <h2 class="mb-3">Desativar acesso</h2>
             <p class="text-muted">Tem certeza que deseja desativar o acesso de <strong>{{ membership.user.username }}</strong>? O login dele deixará de funcionar imediatamente, mas o histórico de movimentações registrado por ele permanece preservado.</p>

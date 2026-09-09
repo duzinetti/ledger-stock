@@ -1,0 +1,14 @@
+{% extends 'inventory/base.html' %}
+
+{% block title %}Erro interno{% endblock %}
+
+{% block content %}
+    <div class="col-12 col-md-6 mx-auto text-center py-5">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="mb-3 text-muted">
+            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+        <h2 class="mb-2">Algo deu errado</h2>
+        <p class="text-muted mb-4">Ocorreu um erro inesperado. Tente novamente em alguns instantes.</p>
+        <a href="{% url 'product_list' %}" class="btn btn-primary">Voltar para produtos</a>
+    </div>
+{% endblock %}
