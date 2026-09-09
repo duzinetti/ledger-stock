@@ -1,6 +1,7 @@
 """
 Project settings for the inventory management system.
 """
+from datetime import timedelta
 from pathlib import Path
 from decouple import config
 
@@ -30,8 +31,28 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'axes',
     'inventory',
 ]
+
+# axes precisa entrar ANTES do ModelBackend padrão do Django - é ele
+# quem intercepta a tentativa de login e barra antes mesmo de checar a
+# senha, se o limite de tentativas falhas já foi atingido.
+AUTHENTICATION_BACKENDS = [
+    'axes.backends.AxesStandaloneBackend',
+    'django.contrib.auth.backends.ModelBackend',
+]
+
+# Bloqueio de login por força bruta: depois de 5 tentativas erradas
+# (username+IP), a conta fica bloqueada por 30 minutos - mesmo que a
+# próxima tentativa use a senha certa.
+AXES_FAILURE_LIMIT = 5
+AXES_COOLOFF_TIME = timedelta(minutes=30)
+AXES_LOCKOUT_PARAMETERS = ['username', 'ip_address']
+# Sem isso, a tela de bloqueio é o texto cru padrão do pacote ("Account
+# locked...") - fora do padrão visual do resto do site (mesmo motivo
+# de termos criado 403.html/404.html/500.html customizados).
+AXES_LOCKOUT_TEMPLATE = 'lockout.html'
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -47,6 +68,10 @@ MIDDLEWARE = [
     'inventory.middleware.ForcePasswordChangeMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # Precisa ser o último middleware da lista - exigência do próprio
+    # django-axes, pra garantir que ele veja a resposta final da
+    # tentativa de autenticação antes de decidir bloquear ou não.
+    'axes.middleware.AxesMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'

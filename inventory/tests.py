@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.auth.models import Group, User
 from django.db import connection, transaction
 from django.db.utils import IntegrityError
@@ -734,8 +735,15 @@ class EmployeeManagementTestCase(TestCase):
         self.operador.is_active = False
         self.operador.save(update_fields=['is_active'])
 
-        logged_in = self.client.login(username='operador_a', password='senha-teste-123')
-        self.assertFalse(logged_in)
+        # client.login() é um atalho de teste que chama authenticate()
+        # sem um request de verdade - incompatível com o AxesBackend,
+        # que exige o request pra rastrear tentativas falhas. Por isso
+        # postamos direto na view de login, o mesmo caminho que a
+        # aplicação usa de verdade.
+        response = self.client.post(reverse('login'), {
+            'username': 'operador_a', 'password': 'senha-teste-123',
+        })
+        self.assertFalse(response.wsgi_request.user.is_authenticated)
 
 
 class CreateEmployeeServiceTestCase(TestCase):
@@ -887,9 +895,53 @@ class ForcePasswordChangeMiddlewareTestCase(TestCase):
         self.assertFalse(self.membership.must_change_password)
 
         # a sessão antiga foi encerrada - a mesma senha temporária não
-        # funciona mais, e a senha nova sim
-        self.assertFalse(self.client.login(username='funcionario', password='temp-senha-123'))
-        self.assertTrue(self.client.login(username='funcionario', password='nova-senha-forte-456'))
+        # funciona mais, e a senha nova sim. client.login() não serve
+        # aqui pelo mesmo motivo do teste acima (AxesBackend exige um
+        # request de verdade), então postamos na view de login.
+        response = self.client.post(reverse('login'), {
+            'username': 'funcionario', 'password': 'temp-senha-123',
+        })
+        self.assertFalse(response.wsgi_request.user.is_authenticated)
+
+        response = self.client.post(reverse('login'), {
+            'username': 'funcionario', 'password': 'nova-senha-forte-456',
+        })
+        self.assertTrue(response.wsgi_request.user.is_authenticated)
+
+
+class LoginRateLimitTestCase(TestCase):
+    """Covers #17 (rate limit): protege o formulário de login contra
+    força bruta. Depois de AXES_FAILURE_LIMIT tentativas erradas
+    seguidas, a conta fica bloqueada por um tempo - mesmo que a
+    próxima tentativa use a senha certa."""
+
+    def setUp(self):
+        self.user = User.objects.create_user(username='usuario_teste', password='senha-correta-123')
+
+    def test_account_locked_after_failure_limit_reached(self):
+        for _ in range(settings.AXES_FAILURE_LIMIT):
+            response = self.client.post(reverse('login'), {
+                'username': 'usuario_teste', 'password': 'senha-errada',
+            })
+            self.assertFalse(response.wsgi_request.user.is_authenticated)
+
+        # mesmo com a senha CERTA, a conta continua bloqueada
+        response = self.client.post(reverse('login'), {
+            'username': 'usuario_teste', 'password': 'senha-correta-123',
+        })
+        self.assertFalse(response.wsgi_request.user.is_authenticated)
+
+    def test_login_still_works_below_failure_limit(self):
+        for _ in range(settings.AXES_FAILURE_LIMIT - 1):
+            response = self.client.post(reverse('login'), {
+                'username': 'usuario_teste', 'password': 'senha-errada',
+            })
+            self.assertFalse(response.wsgi_request.user.is_authenticated)
+
+        response = self.client.post(reverse('login'), {
+            'username': 'usuario_teste', 'password': 'senha-correta-123',
+        })
+        self.assertTrue(response.wsgi_request.user.is_authenticated)
 
 
 class ProductReactivationTestCase(TestCase):
