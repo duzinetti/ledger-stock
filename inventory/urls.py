@@ -11,5 +11,7 @@ urlpatterns = [
     path('product/<int:product_id>/reactivate/', views.product_reactivate, name='product_reactivate'),
     path('product/<int:product_id>/movement/', views.movement_create, name='movement_create'),
     path('employees/', views.employee_list, name='employee_list'),
+    path('employees/new/', views.employee_create, name='employee_create'),
     path('employees/<int:membership_id>/toggle-active/', views.employee_toggle_active, name='employee_toggle_active'),
+    path('employees/<int:membership_id>/reset-password/', views.employee_reset_password, name='employee_reset_password'),
 ]

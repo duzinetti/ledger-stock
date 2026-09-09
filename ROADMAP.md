@@ -81,11 +81,18 @@ completas.
       junto ao campo em vez de mensagem solta)
 
 ### MVP.5 — Deploy
-- [ ] HTTPS obrigatório, variáveis sensíveis fora do código
+- [x] HTTPS obrigatório, variáveis sensíveis fora do código
+      (`SECURE_SSL_REDIRECT`, `SESSION_COOKIE_SECURE`,
+      `CSRF_COOKIE_SECURE`, HSTS — condicionado a `not DEBUG`)
+- [x] Checklist de segurança mínima revisado antes de publicar:
+      páginas de erro customizadas (403/404/500), `robots.txt`,
+      títulos únicos por página, política de privacidade,
+      rate limiting no login (`django-axes`, 5 tentativas / 30min),
+      `pip-audit` nas dependências (sem vulnerabilidades encontradas)
+- [ ] Pentest com Strix (adiado deliberadamente para depois do deploy
+      real — faz mais sentido testar a URL de produção do que
+      localhost; ver decisão em 2026-09-09)
 - [ ] Deploy público (Railway, Render ou PythonAnywhere)
-- [ ] Checklist de segurança mínima revisado antes de publicar:
-      `SECURE_SSL_REDIRECT`, `SESSION_COOKIE_SECURE`,
-      `CSRF_COOKIE_SECURE`
 
 **Critério de conclusão do MVP:** um comércio real consegue cadastrar
 produtos, registrar movimentações com segurança, ver alerta de
@@ -128,9 +135,13 @@ Alinhado à Seção 5 do PRD.
       qualquer empresa de fora dos pilotos familiares como cliente
 - [ ] Previsão de demanda / sugestão de reposição (com ou sem IA —
       Fase 8 do roadmap anterior, mantida aqui)
-- [ ] 2FA (`django-otp`), auditoria avançada (`django-simple-history`),
-      rate limiting no login (`django-axes`) — segurança de nível
-      empresarial, relevante quando houver múltiplos clientes reais
+- [ ] 2FA (`django-otp`), auditoria avançada (`django-simple-history`)
+      — segurança de nível empresarial, relevante quando houver
+      múltiplos clientes reais
+- [ ] Row-Level Security (RLS) do Postgres como reforço do isolamento
+      multi-tenant — hoje já garantido explicitamente na camada de
+      aplicação; ver PRD Questão Aberta #7 (decisão: documentar para
+      depois, revisitar se o número de empresas reais crescer)
 - [ ] App mobile nativo
 
 ---
@@ -160,9 +171,9 @@ Alinhado à Seção 5 do PRD.
 | django-jazzmin | V2 | Reskin do admin |
 | Chart.js | V2 | Gráficos do dashboard |
 | djangorestframework + simplejwt + drf-spectacular | V2 | API |
+| django-axes | MVP.5 | Rate limiting no login (5 tentativas / 30min) |
 | django-otp | Later | 2FA |
 | django-simple-history | Later | Auditoria avançada |
-| django-axes | Later | Rate limiting no login |
 | anthropic (SDK) | Later | Integração com IA |
 | redis, celery | Later | Escalabilidade sob tráfego real |
 
@@ -172,5 +183,10 @@ Alinhado à Seção 5 do PRD.
 
 Os dois bloqueios estão resolvidos, a MVP.2 está completa (Postgres/
 Neon + `python-decouple`, PR #53) e a MVP.4.5 está completa
-(estilização das telas). Falta só a MVP.5 (deploy: HTTPS, Render,
-checklist de segurança mínima) pra fechar o MVP.
+(estilização das telas). Na MVP.5, o checklist de segurança mínima e
+os ajustes de deploy (HTTPS, cookies, static files, rate limiting,
+páginas de erro, `robots.txt`, política de privacidade, auditoria de
+dependências) já estão prontos na branch `feat/deploy-security-prep`.
+Falta só criar o serviço no Render de fato, configurar as variáveis
+de ambiente de produção e validar o HTTPS end-to-end pra fechar o
+MVP.

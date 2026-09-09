@@ -6,9 +6,13 @@ and a future API - this way the HTML view, REST API, and future
 async tasks (e.g. Celery) call the same function and get the same
 behavior, without duplicating validation.
 """
+import secrets
+import string
+
+from django.contrib.auth.models import Group, User
 from django.db import transaction
 
-from .models import MovementType, Product, StockMovement
+from .models import Membership, MovementType, Product, StockMovement
 
 
 class InsufficientStockError(Exception):
@@ -107,3 +111,51 @@ def register_movement(product_id, movement_type, quantity, reason='', user=None)
         )
 
     return movement
+
+
+def _generate_temporary_password(length=12):
+    """Gera uma senha temporária usando `secrets` (não `random`) - random
+    é um gerador pseudo-aleatório previsível a partir da semente, bom
+    pra simulação/jogo; secrets usa a fonte de aleatoriedade
+    criptográfica do sistema operacional, o correto pra qualquer coisa
+    ligada a segurança (senha, token, chave)."""
+    alphabet = string.ascii_letters + string.digits
+    return ''.join(secrets.choice(alphabet) for _ in range(length))
+
+
+def create_employee(company, username, role):
+    """Cria um funcionário novo (User + Group + Membership) com uma
+    senha temporária gerada pelo sistema - o Gestor nunca escolhe nem
+    fica sabendo permanentemente a senha de outra pessoa, só repassa a
+    temporária uma vez. must_change_password=True obriga a troca no
+    primeiro login (ver ForcePasswordChangeMiddleware).
+
+    User + Group + Membership formam uma unidade só: um User sem
+    Membership não pertenceria a nenhuma empresa, e sem Group não
+    passaria no gestor_required nem em nenhuma checagem de papel -
+    por isso as três escritas ficam dentro da mesma transaction.atomic().
+    """
+    temp_password = _generate_temporary_password()
+
+    with transaction.atomic():
+        user = User.objects.create_user(username=username, password=temp_password)
+        group = Group.objects.get(name=role)
+        user.groups.add(group)
+        Membership.objects.create(user=user, company=company, must_change_password=True)
+
+    return user, temp_password
+
+
+def reset_employee_password(membership):
+    """Gera uma nova senha temporária pra um funcionário já existente
+    (ex.: esqueceu a senha) e marca must_change_password=True de novo -
+    mesmo mecanismo do cadastro inicial."""
+    temp_password = _generate_temporary_password()
+
+    with transaction.atomic():
+        membership.user.set_password(temp_password)
+        membership.user.save(update_fields=['password'])
+        membership.must_change_password = True
+        membership.save(update_fields=['must_change_password'])
+
+    return temp_password

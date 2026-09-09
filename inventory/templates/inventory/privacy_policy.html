@@ -1,0 +1,32 @@
+{% extends 'inventory/base.html' %}
+
+{% block title %}Política de Privacidade · LedgerStock{% endblock %}
+
+{% block content %}
+    <div class="col-12 col-md-8 mx-auto">
+        <h2 class="mb-1">Política de Privacidade</h2>
+        <p class="text-muted mb-4">Última atualização: setembro de 2026.</p>
+
+        <p>O LedgerStock é um sistema de controle de estoque usado internamente por uma empresa e seus funcionários. Esta página explica quais dados o sistema guarda, para que servem e como uma pessoa pode pedir a correção ou remoção dos seus dados.</p>
+
+        <h3 class="h5 mt-4">Quais dados o sistema guarda</h3>
+        <ul>
+            <li><strong>Nome de usuário e senha</strong> - usados só para login. A senha nunca é guardada em texto puro: o sistema guarda um hash (uma transformação de mão única, que não pode ser revertida para descobrir a senha original).</li>
+            <li><strong>Qual movimentação de estoque cada pessoa registrou</strong> - o sistema guarda qual usuário registrou cada entrada/saída de produto, com data e hora. Isso existe para dar rastreabilidade ao histórico de estoque (ex.: identificar quando e por quem uma quantidade foi retirada), não para monitorar o desempenho de ninguém.</li>
+            <li><strong>Dados dos produtos cadastrados</strong> (nome, categoria, preço, quantidade) - são dados do negócio, não dados pessoais.</li>
+        </ul>
+        <p>O sistema <strong>não</strong> pede nem guarda e-mail, telefone, CPF, endereço ou qualquer outro dado pessoal além do nome de usuário escolhido no cadastro.</p>
+
+        <h3 class="h5 mt-4">Quem tem acesso</h3>
+        <p>Cada empresa só enxerga os próprios dados - funcionários de uma empresa nunca têm acesso a produtos, movimentações ou funcionários de outra empresa cadastrada no sistema. Dentro de uma mesma empresa, cadastrar e gerenciar o acesso de funcionários é uma ação restrita ao papel de Gestor.</p>
+
+        <h3 class="h5 mt-4">Onde os dados ficam guardados</h3>
+        <p>O banco de dados roda num provedor de nuvem (Neon/PostgreSQL), com conexão sempre criptografada (HTTPS/TLS) entre o sistema e o banco.</p>
+
+        <h3 class="h5 mt-4">Por quanto tempo os dados ficam guardados</h3>
+        <p>Enquanto a conta e a empresa continuarem usando o sistema. Um produto "inativado" não é apagado do banco - o histórico de movimentações precisa continuar existindo para fins de auditoria e conferência de estoque.</p>
+
+        <h3 class="h5 mt-4">Seus direitos</h3>
+        <p>Você pode pedir a correção do seu nome de usuário ou a remoção da sua conta a qualquer momento, falando com o Gestor responsável pela sua empresa dentro do sistema.</p>
+    </div>
+{% endblock %}

@@ -1,8 +1,10 @@
 {% extends 'inventory/base.html' %}
 
+{% block title %}Cadastrar produto · LedgerStock{% endblock %}
+
 {% block content %}
     <h2 class="mb-4">Cadastrar produto</h2>
-    <form method="post" class="col-12 col-md-6">
+    <form method="post" class="col-12 col-md-6 mx-auto">
         {% csrf_token %}
         {% for field in form %}
         <div class="mb-3">

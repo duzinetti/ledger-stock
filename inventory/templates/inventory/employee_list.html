@@ -1,7 +1,12 @@
 {% extends 'inventory/base.html' %}
 
+{% block title %}Funcionários · LedgerStock{% endblock %}
+
 {% block content %}
-    <h2 class="mb-4">Funcionários</h2>
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">Funcionários</h2>
+        <a href="{% url 'employee_create' %}" class="btn btn-success">Cadastrar funcionário</a>
+    </div>
 
     {% if memberships %}
     <div class="table-responsive">
@@ -28,6 +33,8 @@
                     </td>
                     <td class="text-end">
                         {% if membership.user_id != user.id %}
+                            <a href="{% url 'employee_reset_password' membership.id %}"
+                               class="btn btn-sm btn-outline-secondary">Redefinir senha</a>
                             <a href="{% url 'employee_toggle_active' membership.id %}"
                                class="btn btn-sm {% if membership.user.is_active %}btn-outline-danger{% else %}btn-success{% endif %}">
                                 {% if membership.user.is_active %}Desativar{% else %}Reativar{% endif %}

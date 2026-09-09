@@ -63,6 +63,12 @@ class Membership(models.Model):
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='membership'
     )
     company = models.ForeignKey(Company, on_delete=models.PROTECT, related_name='memberships')
+    # True logo após o Gestor cadastrar o funcionário (senha temporária
+    # gerada pelo sistema) ou resetar a senha dele - ForcePasswordChange
+    # Middleware usa isso pra obrigar a pessoa a trocar a senha antes de
+    # liberar qualquer outra tela. Default False: usuários já existentes
+    # não são afetados quando essa coluna é criada.
+    must_change_password = models.BooleanField(default=False)
 
     def __str__(self):
         return f'{self.user} - {self.company}'

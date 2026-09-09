@@ -7,7 +7,8 @@ raw POST request, and the PRD explicitly requires invalid input to
 produce a clear server-side error, not a crash.
 """
 from django import forms
-from django.contrib.auth.forms import AuthenticationForm
+from django.contrib.auth.forms import AuthenticationForm, PasswordChangeForm
+from django.contrib.auth.models import User
 
 from .models import MovementType, Product
 
@@ -92,6 +93,43 @@ class MovementForm(forms.Form):
         max_length=200, required=False, label='Motivo',
         widget=forms.TextInput(attrs={'class': 'form-control'}),
     )
+
+
+class EmployeeCreateForm(forms.Form):
+    """Cadastro de funcionário pelo Gestor - não é ModelForm porque não
+    edita um objeto só (vira User + Group + Membership na service
+    layer); só valida forma e unicidade do username aqui.
+    """
+
+    ROLE_CHOICES = [('Gestor', 'Gestor'), ('Operador', 'Operador')]
+
+    username = forms.CharField(
+        max_length=150, label='Usuário',
+        widget=forms.TextInput(attrs={'class': 'form-control'}),
+    )
+    role = forms.ChoiceField(
+        choices=ROLE_CHOICES, label='Papel',
+        widget=forms.Select(attrs={'class': 'form-select'}),
+    )
+
+    def clean_username(self):
+        username = self.cleaned_data['username']
+        if User.objects.filter(username=username).exists():
+            raise forms.ValidationError('Já existe um usuário com esse nome.')
+        return username
+
+
+class StyledPasswordChangeForm(PasswordChangeForm):
+    """Mesma ideia do StyledAuthenticationForm logo abaixo:
+    PasswordChangeForm é do Django, não dá pra setar widgets via Meta -
+    subclassamos só pra injetar classes Bootstrap nos três campos
+    (senha atual, nova senha, confirmar nova senha).
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.widget.attrs['class'] = 'form-control'
 
 
 class StyledAuthenticationForm(AuthenticationForm):

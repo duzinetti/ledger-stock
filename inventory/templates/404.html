@@ -1,0 +1,14 @@
+{% extends 'inventory/base.html' %}
+
+{% block title %}Página não encontrada · LedgerStock{% endblock %}
+
+{% block content %}
+    <div class="col-12 col-md-6 mx-auto text-center py-5">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="mb-3 text-muted">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <h2 class="mb-2">Página não encontrada</h2>
+        <p class="text-muted mb-4">O endereço que você tentou acessar não existe ou foi movido.</p>
+        <a href="{% url 'product_list' %}" class="btn btn-primary">Voltar para produtos</a>
+    </div>
+{% endblock %}

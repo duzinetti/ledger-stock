@@ -1,23 +1,44 @@
+from django.contrib.auth import logout
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.views import PasswordChangeView
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import Q
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
-from .forms import MovementForm, ProductCreateForm, ProductForm
+from django.http import HttpResponse
+from .forms import EmployeeCreateForm, MovementForm, ProductCreateForm, ProductForm, StyledPasswordChangeForm
 from .models import (
     MovementType,
     Product,
     StockMovement,
     Membership)
 from .services import register_movement as register_movement_service
+from .services import create_employee, reset_employee_password
 from .services import (
-    InsufficientStockError, 
+    InsufficientStockError,
     InactiveProductError,
     InvalidQuantityError,
     InvalidMovementTypeError
 )
 from .decorators import gestor_required
+
+
+def robots_txt(request):
+    """Bloqueia indexação por robôs de busca - o app inteiro fica atrás
+    de login (nenhuma página é realmente pública), mas isso é defesa em
+    profundidade: não custa nada garantir que um buscador nunca tente
+    listar "/produtos/" ou dados de uma empresa cliente.
+    """
+    return HttpResponse('User-agent: *\nDisallow: /\n', content_type='text/plain')
+
+
+def privacy_policy(request):
+    """Política de privacidade - única página do app que não exige
+    login, de propósito: alguém precisa poder ler isso antes de decidir
+    usar o sistema, não só depois de já ter uma conta.
+    """
+    return render(request, 'inventory/privacy_policy.html')
 
 
 @login_required
@@ -323,3 +344,87 @@ def employee_toggle_active(request, membership_id):
         return redirect('employee_list')
 
     return render(request, 'inventory/employee_toggle_active.html', {'membership': membership})
+
+
+@login_required
+@gestor_required
+def employee_create(request):
+    """Cadastra um funcionário novo (User + Group + Membership) com
+    senha temporária gerada pelo sistema.
+
+    Sem redirect no sucesso, de propósito: a senha temporária só existe
+    naquele exato momento, em memória - nunca é salva em texto puro em
+    lugar nenhum (o banco só guarda o hash). Se desse redirect e
+    perdesse o contexto, não teria como mostrar essa senha de novo pro
+    Gestor sem resetá-la de novo.
+    """
+    if request.method == 'POST':
+        form = EmployeeCreateForm(request.POST)
+        if form.is_valid():
+            user, temp_password = create_employee(
+                company=request.user.membership.company,
+                username=form.cleaned_data['username'],
+                role=form.cleaned_data['role'],
+            )
+            return render(request, 'inventory/employee_create_done.html', {
+                'created_user': user,
+                'temp_password': temp_password,
+            })
+    else:
+        form = EmployeeCreateForm()
+
+    return render(request, 'inventory/employee_create.html', {'form': form})
+
+
+@login_required
+@gestor_required
+def employee_reset_password(request, membership_id):
+    """Gera uma nova senha temporária pra um funcionário que esqueceu a
+    própria senha (#26 - sem infraestrutura de e-mail, quem resolve
+    isso é o Gestor, presencialmente/por WhatsApp).
+    """
+    membership = get_object_or_404(
+        Membership, id=membership_id, company=request.user.membership.company
+    )
+
+    if membership.user_id == request.user.id:
+        messages.error(request, 'Você não pode redefinir sua própria senha por aqui - use "Trocar senha".')
+        return redirect('employee_list')
+
+    if request.method == 'POST':
+        temp_password = reset_employee_password(membership)
+        return render(request, 'inventory/employee_create_done.html', {
+            'created_user': membership.user,
+            'temp_password': temp_password,
+        })
+
+    return render(request, 'inventory/employee_reset_password.html', {'membership': membership})
+
+
+class StyledPasswordChangeView(PasswordChangeView):
+    """PasswordChangeView pronta do Django, com três ajustes:
+    - StyledPasswordChangeForm pra ficar com a cara Bootstrap do resto
+      do app (mesmo motivo do StyledAuthenticationForm no login).
+    - Zera Membership.must_change_password quando a troca dá certo -
+      sem isso, ForcePasswordChangeMiddleware ficaria redirecionando a
+      pessoa pra essa mesma tela pra sempre, mesmo já tendo trocado.
+    - Desloga e manda pro login em vez de manter a sessão logada
+      (comportamento padrão do Django) - decisão do product owner:
+      depois de trocar a senha, a pessoa precisa provar que sabe a
+      senha nova entrando de novo com ela.
+    """
+    form_class = StyledPasswordChangeForm
+
+    def form_valid(self, form):
+        # super().form_valid() salva a senha nova e chama
+        # update_session_auth_hash() pra manter a sessão atual válida -
+        # descartamos essa resposta de propósito, porque o passo
+        # seguinte (logout) invalida a sessão de qualquer forma.
+        super().form_valid(form)
+        if hasattr(self.request.user, 'membership'):
+            self.request.user.membership.must_change_password = False
+            self.request.user.membership.save(update_fields=['must_change_password'])
+
+        logout(self.request)
+        messages.success(self.request, 'Senha alterada com sucesso. Faça login novamente.')
+        return redirect('login')
