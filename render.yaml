@@ -1,0 +1,33 @@
+services:
+  - name: ledger-stock
+    type: web
+    runtime: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt && python manage.py collectstatic --noinput"
+    preDeployCommand: "python manage.py migrate"
+    startCommand: "gunicorn config.wsgi:application"
+    envVars:
+      # Gerada automaticamente pelo Render (valor aleatório de 256 bits) -
+      # nunca precisa ser digitada manualmente.
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: "False"
+      # sync: false = preenchido manualmente no painel do Render depois
+      # que o serviço for criado, nunca fica guardado neste arquivo nem
+      # no git. ALLOWED_HOSTS só dá pra saber depois que o Render atribui
+      # o domínio (ex.: ledger-stock.onrender.com); as credenciais do
+      # Postgres de produção (Neon) são intencionalmente mantidas fora de
+      # qualquer arquivo desde a decisão original de infraestrutura.
+      - key: ALLOWED_HOSTS
+        sync: false
+      - key: DB_NAME
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        value: "5432"
