@@ -1,12 +1,21 @@
+from datetime import timedelta
+
 from django.contrib.auth import logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import PasswordChangeView
 from django.core.paginator import Paginator
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import (
+    Q,
+    Sum,
+    F,
+    DecimalField,
+)
+from django.db.models.functions import TruncDate
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.http import HttpResponse
+from django.utils import timezone
 from .forms import EmployeeCreateForm, MovementForm, ProductCreateForm, ProductForm, StyledPasswordChangeForm
 from .models import (
     MovementType,
@@ -294,6 +303,56 @@ def movement_create(request, product_id):
         'form': ProductForm(instance=product),
         'movement_form': form,
     })
+
+
+@login_required
+def dashboard(request):
+    company = request.user.membership.company
+    products = Product.objects.active().with_current_quantity().filter(company=company)
+    total_value = products.aggregate(
+        total=Sum(F('current_qty') * F('price'), output_field=DecimalField(max_digits=12, decimal_places=2))
+    )['total'] or 0
+    critical_products = products.filter(is_low_stock=True).order_by('current_qty')
+
+    thirty_days_ago = timezone.now() - timedelta(days=30)
+    movement_count = StockMovement.objects.filter(
+        product__company=company, date__gte=thirty_days_ago
+    ).count()
+    movements = (
+        StockMovement.objects
+        .filter(product__company=company, date__gte=thirty_days_ago)
+        .annotate(day=TruncDate('date'))
+        .values('day', 'type')
+        .annotate(total=Sum('quantity'))
+        .order_by('day')
+    )
+
+    # O gráfico quer 3 listas paralelas (um dia, uma entrada, uma saída
+    # por posição) - o passo acima devolve uma linha por combinação de
+    # dia+tipo, então primeiro reorganiza isso num dicionário por dia.
+    dados_por_dia = {}
+    for m in movements:
+        dia = m['day'].isoformat()
+        dados_por_dia.setdefault(dia, {'entrada': 0, 'saida': 0})
+        if m['type'] == MovementType.IN:
+            dados_por_dia[dia]['entrada'] = m['total']
+        else:
+            dados_por_dia[dia]['saida'] = m['total']
+
+    dias = sorted(dados_por_dia.keys())
+    entradas = [dados_por_dia[d]['entrada'] for d in dias]
+    saidas = [dados_por_dia[d]['saida'] for d in dias]
+
+    return render(request, 'inventory/dashboard.html', {
+        'total_value': total_value,
+        'critical_products': critical_products,
+        'critical_count': critical_products.count(),
+        'movement_count': movement_count,
+        'chart_labels': dias,
+        'chart_entradas': entradas,
+        'chart_saidas': saidas,
+    })
+
 
 
 @login_required

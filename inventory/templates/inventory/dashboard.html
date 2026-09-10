@@ -1,0 +1,124 @@
+{% extends 'inventory/base.html' %}
+
+{% block title %}Dashboard · LedgerStock{% endblock %}
+
+{% block content %}
+    <div class="row g-3 mb-4">
+        <div class="col-12 col-md-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Valor total em estoque</p>
+                    <p class="numeric fs-3 mb-0">R$ {{ total_value }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-md-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Produtos críticos</p>
+                    <p class="numeric fs-3 mb-0">{{ critical_count }}</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-md-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <p class="text-muted mb-1">Movimentações (30 dias)</p>
+                    <p class="numeric fs-3 mb-0">{{ movement_count }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">Movimentação dos últimos 30 dias</div>
+        <div class="card-body">
+            {% if movement_count %}
+                <canvas id="movementChart" height="90"></canvas>
+            {% else %}
+                <p class="text-muted mb-0">Nenhuma movimentação registrada nos últimos 30 dias.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">Produtos críticos</div>
+        {% if critical_products %}
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Nome</th>
+                        <th>Categoria</th>
+                        <th class="numeric">Qtd. atual</th>
+                        <th class="numeric">Qtd. mínima</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for product in critical_products %}
+                    <tr>
+                        <td>{{ product.name }}</td>
+                        <td>{{ product.category }}</td>
+                        <td class="numeric">{{ product.current_qty }}</td>
+                        <td class="numeric">{{ product.minimum_quantity }}</td>
+                        <td class="text-end">
+                            <a href="{% url 'product_detail' product.id %}" class="btn btn-sm btn-outline-secondary">Ver</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="card-body">
+            <p class="text-muted mb-0">Nenhum produto abaixo do estoque mínimo.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    {{ chart_labels|json_script:"chart-labels" }}
+    {{ chart_entradas|json_script:"chart-entradas" }}
+    {{ chart_saidas|json_script:"chart-saidas" }}
+{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"
+        integrity="sha384-NrKB+u6Ts6AtkIhwPixiKTzgSKNblyhlk0Sohlgar9UHUBzai/sgnNNWWd291xqt"
+        crossorigin="anonymous"></script>
+{% endblock %}
+
+{% block extra_scripts %}
+{% if movement_count %}
+<script>
+    // json_script (acima) coloca o dado num <script type="application/json">
+    // escapado com segurança - lemos o texto dele e convertemos de volta
+    // pra lista/array do JavaScript com JSON.parse, em vez de interpolar
+    // o dado direto no HTML (que abriria brecha de XSS).
+    const labels = JSON.parse(document.getElementById('chart-labels').textContent);
+    const entradas = JSON.parse(document.getElementById('chart-entradas').textContent);
+    const saidas = JSON.parse(document.getElementById('chart-saidas').textContent);
+
+    new Chart(document.getElementById('movementChart'), {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                { label: 'Entrada', data: entradas, backgroundColor: '#5e6ad2' },
+                { label: 'Saída', data: saidas, backgroundColor: '#dc3545' },
+            ],
+        },
+        options: {
+            responsive: true,
+            scales: {
+                x: { ticks: { color: '#949ba4' }, grid: { color: '#3f4147' } },
+                y: { ticks: { color: '#949ba4' }, grid: { color: '#3f4147' }, beginAtZero: true },
+            },
+            plugins: {
+                legend: { labels: { color: '#dbdee1' } },
+            },
+        },
+    });
+</script>
+{% endif %}
+{% endblock %}
