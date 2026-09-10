@@ -3,8 +3,11 @@ services:
     type: web
     runtime: python
     plan: free
-    buildCommand: "pip install -r requirements.txt && python manage.py collectstatic --noinput"
-    preDeployCommand: "python manage.py migrate"
+    # preDeployCommand seria o lugar ideal pra rodar a migração (roda
+    # depois do build, antes do start), mas esse campo só existe nos
+    # planos pagos do Render - no tier gratuito, o migrate entra junto
+    # no buildCommand mesmo.
+    buildCommand: "pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate"
     startCommand: "gunicorn config.wsgi:application"
     envVars:
       # Gerada automaticamente pelo Render (valor aleatório de 256 bits) -
