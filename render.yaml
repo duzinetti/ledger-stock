@@ -7,7 +7,7 @@ services:
     # depois do build, antes do start), mas esse campo só existe nos
     # planos pagos do Render - no tier gratuito, o migrate entra junto
     # no buildCommand mesmo.
-    buildCommand: "pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate"
+    buildCommand: "pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate && python manage.py create_superuser_if_none_exists"
     startCommand: "gunicorn config.wsgi:application"
     envVars:
       # Gerada automaticamente pelo Render (valor aleatório de 256 bits) -
@@ -23,6 +23,16 @@ services:
       # Postgres de produção (Neon) são intencionalmente mantidas fora de
       # qualquer arquivo desde a decisão original de infraestrutura.
       - key: ALLOWED_HOSTS
+        sync: false
+      # Usadas só pelo create_superuser_if_none_exists no primeiro
+      # deploy - o comando não faz nada se já existir um superusuário,
+      # então é seguro deixar configuradas mesmo depois. Dá pra apagar
+      # o valor de DJANGO_SUPERUSER_PASSWORD no painel do Render assim
+      # que confirmar que o login funciona, se preferir não deixar essa
+      # senha em texto puro salva lá indefinidamente.
+      - key: DJANGO_SUPERUSER_USERNAME
+        sync: false
+      - key: DJANGO_SUPERUSER_PASSWORD
         sync: false
       - key: DB_NAME
         sync: false
