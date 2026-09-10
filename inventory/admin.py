@@ -2,6 +2,7 @@ from django.contrib import admin
 from .models import Company, Membership, Product, StockMovement
 from .forms import ProductForm
 from django.contrib.admin import AdminSite
+from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User, Group
 
 
@@ -71,7 +72,12 @@ class MembershipAdmin(admin.ModelAdmin):
 
 admin_site.register(Product, ProductAdmin)
 admin_site.register(StockMovement, StockMovementAdmin)
-admin_site.register(User)
+# UserAdmin (o mesmo do Django padrão) em vez do registro cru: o
+# formulário de "adicionar usuário" dele passa a senha digitada por
+# set_password() (criptografa direito) - o registro simples anterior
+# deixava o campo senha como texto puro, então um usuário criado ali
+# nunca conseguia logar de verdade.
+admin_site.register(User, UserAdmin)
 admin_site.register(Group)
 # Company e Membership não têm tela própria no app (não existe rota
 # "cadastrar empresa") - o único jeito de existir a primeira empresa e
