@@ -1,7 +1,9 @@
+import os
 from decimal import Decimal
 
 from django.conf import settings
 from django.contrib.auth.models import Group, User
+from django.core.management import call_command
 from django.db import connection, transaction
 from django.db.utils import IntegrityError
 from django.test import TestCase, TransactionTestCase, skipUnlessDBFeature
@@ -1080,3 +1082,42 @@ class DashboardViewTestCase(TestCase):
         self.client.force_login(self.user)
         response = self.client.get(reverse('dashboard'))
         self.assertEqual(response.context['movement_count'], 2)
+
+
+class CreateSuperuserIfNoneExistsCommandTestCase(TestCase):
+    """Covers o management command usado no build do Render (tier
+    gratuito não tem Shell pra rodar createsuperuser manualmente) -
+    precisa criar o superusuário na primeira vez, mas nunca tentar de
+    novo (ou dar erro) nos deploys seguintes, quando ele já existe."""
+
+    def test_creates_superuser_when_none_exists_and_env_vars_are_set(self):
+        with patch.dict('os.environ', {
+            'DJANGO_SUPERUSER_USERNAME': 'admin_producao',
+            'DJANGO_SUPERUSER_PASSWORD': 'senha-forte-de-producao-123',
+        }):
+            call_command('create_superuser_if_none_exists')
+
+        user = User.objects.get(username='admin_producao')
+        self.assertTrue(user.is_superuser)
+        self.assertTrue(user.check_password('senha-forte-de-producao-123'))
+
+    def test_does_nothing_when_a_superuser_already_exists(self):
+        User.objects.create_superuser(username='ja_existe', password='qualquer-senha-123')
+
+        with patch.dict('os.environ', {
+            'DJANGO_SUPERUSER_USERNAME': 'outro_admin',
+            'DJANGO_SUPERUSER_PASSWORD': 'outra-senha-123',
+        }):
+            call_command('create_superuser_if_none_exists')
+
+        # não criou o segundo, nem quebrou tentando
+        self.assertFalse(User.objects.filter(username='outro_admin').exists())
+        self.assertEqual(User.objects.filter(is_superuser=True).count(), 1)
+
+    def test_does_nothing_when_env_vars_are_missing(self):
+        with patch.dict('os.environ', {}, clear=False):
+            os.environ.pop('DJANGO_SUPERUSER_USERNAME', None)
+            os.environ.pop('DJANGO_SUPERUSER_PASSWORD', None)
+            call_command('create_superuser_if_none_exists')
+
+        self.assertFalse(User.objects.filter(is_superuser=True).exists())
