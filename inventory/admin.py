@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Product, StockMovement
+from .models import Company, Membership, Product, StockMovement
 from .forms import ProductForm
 from django.contrib.admin import AdminSite
 from django.contrib.auth.models import User, Group
@@ -64,7 +64,20 @@ class StockMovementAdmin(admin.ModelAdmin):
         return False
 
 
+class MembershipAdmin(admin.ModelAdmin):
+    list_display = ('user', 'company', 'must_change_password')
+    list_select_related = ('user', 'company')
+
+
 admin_site.register(Product, ProductAdmin)
 admin_site.register(StockMovement, StockMovementAdmin)
 admin_site.register(User)
 admin_site.register(Group)
+# Company e Membership não têm tela própria no app (não existe rota
+# "cadastrar empresa") - o único jeito de existir a primeira empresa e
+# o primeiro vínculo usuário-empresa em produção é o superusuário
+# criar isso aqui, uma única vez, na mão. Depois disso, esse primeiro
+# Gestor usa a tela normal de "Cadastrar funcionário" pra todo o
+# resto - o admin não vira caminho recorrente de uso.
+admin_site.register(Company)
+admin_site.register(Membership, MembershipAdmin)
