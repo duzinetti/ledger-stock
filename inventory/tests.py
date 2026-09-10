@@ -1,3 +1,5 @@
+from decimal import Decimal
+
 from django.conf import settings
 from django.contrib.auth.models import Group, User
 from django.db import connection, transaction
@@ -1030,3 +1032,51 @@ class ProductReactivationTestCase(TestCase):
 
         response = self.client.get(reverse('product_list'))
         self.assertContains(response, 'Produto Inativo')
+
+
+class DashboardViewTestCase(TestCase):
+    """Covers as duas métricas do dashboard que são regra de negócio de
+    verdade (não só visualização): o valor total em estoque precisa
+    bater a conta certa, e "produtos críticos" precisa listar só quem
+    está abaixo do próprio mínimo - de uma única empresa."""
+
+    def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
+        self.other_company = Company.objects.create(name='Outra Empresa')
+
+        self.user = User.objects.create_user(username='funcionario', password='senha-teste-123')
+        Membership.objects.create(user=self.user, company=self.company)
+
+        self.product_ok = Product.objects.create(
+            company=self.company, name='Produto OK', price=10, minimum_quantity=5
+        )
+        StockMovement.objects.create(product=self.product_ok, type='IN', quantity=20)
+
+        self.product_critico = Product.objects.create(
+            company=self.company, name='Produto Crítico', price=Decimal('2.50'), minimum_quantity=10
+        )
+        StockMovement.objects.create(product=self.product_critico, type='IN', quantity=3)
+
+        # produto e movimentação de outra empresa - não deve entrar em
+        # nenhuma das contas acima
+        other_product = Product.objects.create(
+            company=self.other_company, name='Produto de Outra Empresa', price=100, minimum_quantity=0
+        )
+        StockMovement.objects.create(product=other_product, type='IN', quantity=50)
+
+    def test_total_stock_value_is_calculated_correctly(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('dashboard'))
+        self.assertEqual(response.status_code, 200)
+        # 20 * 10 + 3 * 2.50 = 207.50 - não inclui os 50 * 100 da outra empresa
+        self.assertEqual(response.context['total_value'], Decimal('207.50'))
+
+    def test_only_products_below_minimum_are_listed_as_critical(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('dashboard'))
+        self.assertEqual(list(response.context['critical_products']), [self.product_critico])
+
+    def test_movement_count_reflects_only_this_companys_movements(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('dashboard'))
+        self.assertEqual(response.context['movement_count'], 2)
