@@ -2,33 +2,33 @@
 
 LedgerStock is a stock management system for small local businesses (hardware stores, small wholesalers) — it tracks inventory, not sales. It is explicitly not a point-of-sale system and not a full ERP; see [PRD.md](PRD.md) §3 for the full list of goals and non-goals.
 
-🚧 **Status: active MVP development.** Not deployed, not production-ready yet — see below for what's done and what's left.
+✅ **Status: MVP live in production.** [ledger-stock.onrender.com](https://ledger-stock.onrender.com) — see below for what's shipped and what's next.
 
 ## Status
 
-Core application logic for the MVP is done; what remains is mostly infrastructure, not business rules.
+The MVP is fully shipped and deployed, with real pilot businesses using it.
 
 **Done:**
 - Product CRUD (soft delete on removal, movement history preserved)
 - Stock movement tracking (entry/exit) with insufficient-stock validation
 - Server-side validation via Django `ModelForm`s
-- Login required for every read/write action
+- Login required for every read/write action, with role-based permissions (Gestor/Operador) and multi-tenant company isolation
 - N+1 query prevention on the product listing
 - Race-safe concurrent stock movements (`select_for_update`)
 - Low-stock visual alert
+- Production deploy on Render (PostgreSQL via Neon, HTTPS, `whitenoise` static files, `gunicorn`)
+- Login rate limiting (`django-axes`), forced password change on first login, custom error pages
+- V2 dashboard pulled forward: aggregate stock value, critical products, and a movement chart
 
-**Not yet done:**
-- Production database (still SQLite)
-- Environment-based configuration (secrets are currently hardcoded in `settings.py`)
-- HTTPS / public deployment
-
-Full backlog and current work: [GitHub Project board](https://github.com/users/duzinetti/projects/1).
+**Next up (V2):** structured product categories, a sales report, a REST API — full backlog on the [GitHub Project board](https://github.com/users/duzinetti/projects/1) and [ROADMAP.md](ROADMAP.md).
 
 ## Tech Stack
 
 - Python 3
 - Django 5.x
-- SQLite (development) — a production-grade relational database (PostgreSQL/MySQL) is not configured yet, see [ROADMAP.md](ROADMAP.md)
+- PostgreSQL via [Neon](https://neon.tech) (serverless, free tier)
+- Deployed on [Render](https://render.com) (free tier) via [`render.yaml`](render.yaml) — `gunicorn` + `whitenoise`
+- `django-axes` for login rate limiting
 
 ## Architecture Highlights
 
@@ -45,6 +45,15 @@ Business logic — most notably stock movement registration — lives in a dedic
 `services.register_movement()` wraps the read-validate-write sequence in `transaction.atomic()` + `select_for_update()`, so two concurrent movements on the same product can't both pass the insufficient-stock check and push the quantity negative.
 
 ## Getting Started
+
+Needs a local PostgreSQL database and a `.env` file (not committed) with:
+```
+SECRET_KEY=<any random string for local dev>
+DB_NAME=...
+DB_USER=...
+DB_PASSWORD=...
+DB_HOST=...
+```
 
 ```bash
 git clone https://github.com/duzinetti/ledger-stock.git
