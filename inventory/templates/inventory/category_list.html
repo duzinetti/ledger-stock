@@ -1,0 +1,31 @@
+{% extends 'inventory/base.html' %}
+
+{% block title %}Categorias · LedgerStock{% endblock %}
+
+{% block content %}
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2 class="mb-0">Categorias</h2>
+        <a href="{% url 'category_create' %}" class="btn btn-success">Cadastrar categoria</a>
+    </div>
+
+    {% if categories %}
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Nome</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for category in categories %}
+                <tr>
+                    <td>{{ category.name }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <p class="text-center text-muted py-5">Nenhuma categoria cadastrada.</p>
+    {% endif %}
+{% endblock %}

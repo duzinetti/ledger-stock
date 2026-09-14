@@ -11,8 +11,8 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.db.models import ProtectedError
 
-from .forms import MovementForm, ProductForm
-from .models import Company, Membership, Product, StockMovement
+from .forms import CategoryForm, MovementForm, ProductForm
+from .models import Category, Company, Membership, Product, StockMovement
 from .services import (
     register_movement,
     create_employee,
@@ -226,6 +226,22 @@ class ProductFormTestCase(TestCase):
             'name': 'Parafuso', 'category': '', 'price': '1.50', 'minimum_quantity': 5,
         })
         self.assertTrue(form.is_valid())
+
+    def test_category_from_another_company_is_rejected(self):
+        # o dropdown só é populado com as categorias da company= passada
+        # pro form - mas nada impede alguém de forjar o POST com o id de
+        # uma categoria de outra empresa, então isso também precisa ser
+        # barrado na validação, não só escondido na UI.
+        company_a = Company.objects.create(name='Empresa A')
+        company_b = Company.objects.create(name='Empresa B')
+        category_b = Category.objects.create(company=company_b, name='Bebidas')
+
+        form = ProductForm(data={
+            'name': 'Refrigerante', 'category': category_b.id, 'price': '5.00', 'minimum_quantity': 5,
+        }, company=company_a)
+
+        self.assertFalse(form.is_valid())
+        self.assertIn('category', form.errors)
 
 
 class MovementFormTestCase(TestCase):
@@ -748,6 +764,98 @@ class EmployeeManagementTestCase(TestCase):
             'username': 'operador_a', 'password': 'senha-teste-123',
         })
         self.assertFalse(response.wsgi_request.user.is_authenticated)
+
+
+class CategoryManagementTestCase(TestCase):
+    """Covers a estruturação de categoria (texto livre -> model
+    Category): acesso restrito a Gestor (mesmo padrão de
+    EmployeeManagementTestCase), isolamento entre empresas, e a
+    duplicidade de nome bloqueada de forma amigável (não só pela
+    constraint do banco)."""
+
+    def setUp(self):
+        self.company_a = Company.objects.create(name='Empresa A')
+        self.company_b = Company.objects.create(name='Empresa B')
+
+        gestor_group = Group.objects.get(name='Gestor')
+
+        self.gestor = User.objects.create_user(username='gestor_a', password='senha-teste-123')
+        self.gestor.groups.add(gestor_group)
+        Membership.objects.create(user=self.gestor, company=self.company_a)
+
+        self.operador = User.objects.create_user(username='operador_a', password='senha-teste-123')
+        Membership.objects.create(user=self.operador, company=self.company_a)
+
+        self.category_a = Category.objects.create(company=self.company_a, name='Bebidas')
+        self.category_b = Category.objects.create(company=self.company_b, name='Limpeza')
+
+    # --- acesso restrito ao grupo Gestor ---
+
+    def test_operador_cannot_view_category_list(self):
+        self.client.force_login(self.operador)
+        response = self.client.get(reverse('category_list'))
+        self.assertEqual(response.status_code, 403)
+
+    def test_operador_cannot_create_category(self):
+        self.client.force_login(self.operador)
+        response = self.client.post(reverse('category_create'), {'name': 'Papelaria'})
+        self.assertEqual(response.status_code, 403)
+
+    # --- isolamento entre empresas ---
+
+    def test_category_list_does_not_show_other_companys_categories(self):
+        self.client.force_login(self.gestor)
+        response = self.client.get(reverse('category_list'))
+        self.assertContains(response, 'Bebidas')
+        self.assertNotContains(response, 'Limpeza')
+
+    # --- cadastro em si ---
+
+    def test_gestor_creates_category(self):
+        self.client.force_login(self.gestor)
+        response = self.client.post(reverse('category_create'), {'name': 'Papelaria'})
+        self.assertRedirects(response, reverse('category_list'))
+        self.assertTrue(Category.objects.filter(company=self.company_a, name='Papelaria').exists())
+
+    def test_duplicate_name_same_company_is_rejected(self):
+        form = CategoryForm(data={'name': 'bebidas'}, company=self.company_a)  # case diferente de propósito
+        self.assertFalse(form.is_valid())
+        self.assertIn('name', form.errors)
+
+    def test_same_name_different_company_is_allowed(self):
+        form = CategoryForm(data={'name': 'Limpeza'}, company=self.company_a)
+        self.assertTrue(form.is_valid())
+
+
+class ProductListCategoryFilterTestCase(TestCase):
+    """Covers o filtro por categoria na listagem: só retorna produto da
+    categoria escolhida, e só dentro da empresa do usuário logado."""
+
+    def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
+        self.user = User.objects.create_user(username='funcionario', password='senha-teste-123')
+        Membership.objects.create(user=self.user, company=self.company)
+
+        self.bebidas = Category.objects.create(company=self.company, name='Bebidas')
+        self.limpeza = Category.objects.create(company=self.company, name='Limpeza')
+
+        Product.objects.create(company=self.company, name='Refrigerante', category=self.bebidas, price=5, minimum_quantity=1)
+        Product.objects.create(company=self.company, name='Detergente', category=self.limpeza, price=3, minimum_quantity=1)
+        Product.objects.create(company=self.company, name='Sem categoria', price=1, minimum_quantity=1)
+
+    def test_filter_returns_only_products_of_the_chosen_category(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('product_list'), {'category': self.bebidas.id})
+        self.assertContains(response, 'Refrigerante')
+        self.assertNotContains(response, 'Detergente')
+        self.assertNotContains(response, 'Sem categoria')
+
+    def test_no_filter_returns_every_product(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('product_list'))
+        self.assertContains(response, 'Refrigerante')
+        self.assertContains(response, 'Detergente')
+        self.assertContains(response, 'Sem categoria')
 
 
 class CreateEmployeeServiceTestCase(TestCase):
