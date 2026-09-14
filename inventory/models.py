@@ -53,6 +53,19 @@ class Company(models.Model):
         return self.name
 
 
+class Category(models.Model):
+    company = models.ForeignKey(Company, on_delete=models.PROTECT, related_name='categories')
+    name = models.CharField(max_length=50)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['company', 'name'], name='unique_category_name_per_company',)
+        ]
+
+    def __str__(self):
+        return self.name
+
+
 class Membership(models.Model):
     """Links a login to the one company it belongs to - read via
     request.user.membership.company wherever a view needs to know
@@ -77,7 +90,7 @@ class Membership(models.Model):
 class Product(models.Model):
     company = models.ForeignKey(Company, on_delete=models.PROTECT)
     name = models.CharField(max_length=100)
-    category = models.CharField(max_length=50, blank=True)
+    category = models.ForeignKey(Category, on_delete=models.PROTECT, null=True, blank=True, related_name='products')
     price = models.DecimalField(max_digits=10, decimal_places=2)
     minimum_quantity = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)

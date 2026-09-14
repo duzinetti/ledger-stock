@@ -10,7 +10,10 @@ from django import forms
 from django.contrib.auth.forms import AuthenticationForm, PasswordChangeForm
 from django.contrib.auth.models import User
 
-from .models import MovementType, Product
+from .models import (
+    MovementType, 
+    Product,
+    Category)
 
 
 class ProductForm(forms.ModelForm):
@@ -33,14 +36,21 @@ class ProductForm(forms.ModelForm):
             'minimum_quantity': 'Quantidade mínima',
         }
         help_texts = {
-            'category': 'Ex.: Bebidas, Limpeza, Papelaria',
+            'category': 'Não achou a categoria? Cadastre uma nova na tela de Categorias.',
         }
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control'}),
-            'category': forms.TextInput(attrs={'class': 'form-control'}),
+            'category': forms.Select(attrs={'class': 'form-select'}),
             'price': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
             'minimum_quantity': forms.NumberInput(attrs={'class': 'form-control'}),
         }
+
+    def __init__(self, *args, company=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['category'].required = False
+        if company is not None:
+            self.fields['category'].queryset = Category.objects.filter(company=company).order_by('name')
+
 
     def clean_price(self):
         price = self.cleaned_data['price']
@@ -142,3 +152,27 @@ class StyledAuthenticationForm(AuthenticationForm):
         super().__init__(*args, **kwargs)
         self.fields['username'].widget.attrs['class'] = 'form-control'
         self.fields['password'].widget.attrs['class'] = 'form-control'
+
+
+class CategoryForm(forms.ModelForm):
+    """company não é um campo do formulário (a view atribui na hora de
+    salvar, igual product_create faz com Product) - mas o clean_name
+    precisa saber a empresa pra checar duplicidade, senão o erro só
+    aparece feio, direto do banco, na hora do save().
+    """
+
+    class Meta:
+        model = Category
+        fields = ['name']
+        labels = {'name': 'Nome'}
+        widgets = {'name': forms.TextInput(attrs={'class': 'form-control'})}
+
+    def __init__(self, *args, company=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.company = company
+
+    def clean_name(self):
+        name = self.cleaned_data['name']
+        if self.company is not None and Category.objects.filter(company=self.company, name__iexact=name).exists():
+            raise forms.ValidationError('Já existe uma categoria com esse nome.')
+        return name

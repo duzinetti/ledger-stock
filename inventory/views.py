@@ -16,12 +16,19 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib import messages
 from django.http import HttpResponse
 from django.utils import timezone
-from .forms import EmployeeCreateForm, MovementForm, ProductCreateForm, ProductForm, StyledPasswordChangeForm
+from .forms import (
+    EmployeeCreateForm, 
+    MovementForm, 
+    ProductCreateForm, 
+    ProductForm, 
+    StyledPasswordChangeForm,
+    CategoryForm)
 from .models import (
     MovementType,
     Product,
     StockMovement,
-    Membership)
+    Membership,
+    Category)
 from .services import register_movement as register_movement_service
 from .services import create_employee, reset_employee_password
 from .services import (
@@ -59,13 +66,15 @@ def product_list(request):
     data to be publicly visible).
     """
     search_term = request.GET.get('q', '')
+    category_id = request.GET.get('category', '')
+    company = request.user.membership.company
 
     # with_current_quantity() brings the calculated quantity in a
     # SINGLE query, instead of firing an aggregation query per
     # product (N+1) as would happen using the `current_quantity`
     # property inside the template loop.
     products = Product.objects.active().with_current_quantity().filter(
-        company=request.user.membership.company
+        company=company
     ).order_by('name')
     if search_term:
         # Sempre busca por nome; se o termo digitado for só dígitos,
@@ -75,6 +84,8 @@ def product_list(request):
         if search_term.isdigit():
             query |= Q(id=search_term)
         products = products.filter(query)
+    if category_id.isdigit():
+        products = products.filter(category_id=category_id)
 
     paginator = Paginator(products, 10)
     paginated_products = paginator.get_page(request.GET.get('page'))
@@ -82,6 +93,8 @@ def product_list(request):
     return render(request, 'inventory/product_list.html', {
         'products': paginated_products,
         'search_term': search_term,
+        'categories': Category.objects.filter(company=company).order_by('name'),
+        'selected_category_id': category_id,
     })
 
 
@@ -96,7 +109,7 @@ def product_create(request):
     product_update too.
     """
     if request.method == 'POST':
-        form = ProductCreateForm(request.POST)
+        form = ProductCreateForm(request.POST, company=request.user.membership.company)
         if form.is_valid():
             # transaction.atomic() aqui garante que produto + movimento
             # inicial nascem juntos: se o registro do movimento falhar
@@ -120,7 +133,7 @@ def product_create(request):
             messages.success(request, 'Produto cadastrado com sucesso.')
             return redirect('product_list')
     else:
-        form = ProductCreateForm()
+        form = ProductCreateForm(company=request.user.membership.company)
     return render(request, 'inventory/product_create.html', {'form': form})
 
 
@@ -140,13 +153,13 @@ def product_update(request, product_id):
     product = get_object_or_404(Product, id=product_id, company=request.user.membership.company)
 
     if request.method == 'POST':
-        form = ProductForm(request.POST, instance=product)
+        form = ProductForm(request.POST, instance=product, company=request.user.membership.company)
         if form.is_valid():
             form.save()
             messages.success(request, 'Produto atualizado.')
             return redirect('product_detail', product_id=product.id)
     else:
-        form = ProductForm(instance=product)
+        form = ProductForm(instance=product, company=request.user.membership.company)
 
     return render(request, 'inventory/product_update.html', {
         'product': product,
@@ -300,7 +313,7 @@ def movement_create(request, product_id):
     # product_update.html com o form da movimentação preenchido e com erro.
     return render(request, 'inventory/product_update.html', {
         'product': product,
-        'form': ProductForm(instance=product),
+        'form': ProductForm(instance=product, company=request.user.membership.company),
         'movement_form': form,
     })
 
@@ -352,7 +365,6 @@ def dashboard(request):
         'chart_entradas': entradas,
         'chart_saidas': saidas,
     })
-
 
 
 @login_required
@@ -487,3 +499,26 @@ class StyledPasswordChangeView(PasswordChangeView):
         logout(self.request)
         messages.success(self.request, 'Senha alterada com sucesso. Faça login novamente.')
         return redirect('login')
+
+
+@login_required
+@gestor_required
+def category_list(request):
+    categories = Category.objects.filter(company=request.user.membership.company).order_by('name')
+    return render(request, 'inventory/category_list.html', {'categories': categories})
+
+
+@login_required
+@gestor_required
+def category_create(request):
+    if request.method == 'POST':
+        form = CategoryForm(request.POST, company=request.user.membership.company)
+        if form.is_valid():
+            category = form.save(commit=False)
+            category.company = request.user.membership.company
+            category.save()
+            messages.success(request, 'Categoria cadastrada.')
+            return redirect('category_list')
+    else:
+        form = CategoryForm(company=request.user.membership.company)
+    return render(request, 'inventory/category_create.html', {'form': form})
