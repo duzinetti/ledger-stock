@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timedelta
 from decimal import Decimal
 
 from django.conf import settings
@@ -10,9 +11,11 @@ from django.test import TestCase, TransactionTestCase, skipUnlessDBFeature
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from django.db.models import ProtectedError
+from django.utils import timezone
 
 from .forms import CategoryForm, MovementForm, ProductForm
 from .models import Category, Company, Membership, Product, StockMovement
+from .views import _add_months
 from .services import (
     register_movement,
     create_employee,
@@ -35,12 +38,12 @@ class CurrentQuantityTestCase(TestCase):
         )
 
     def test_current_quantity_sums_in_and_out_movements(self):
-        StockMovement.objects.create(product=self.product, type='IN', quantity=100)
-        StockMovement.objects.create(product=self.product, type='OUT', quantity=30)
+        StockMovement.objects.create(product=self.product, type='IN', quantity=100, unit_price=self.product.price)
+        StockMovement.objects.create(product=self.product, type='OUT', quantity=30, unit_price=self.product.price)
         self.assertEqual(self.product.current_quantity, 70)
 
     def test_low_stock_when_below_minimum(self):
-        StockMovement.objects.create(product=self.product, type='IN', quantity=5)
+        StockMovement.objects.create(product=self.product, type='IN', quantity=5, unit_price=self.product.price)
         self.assertTrue(self.product.low_stock)
 
     def test_with_current_quantity_for_product_with_no_movements(self):
@@ -58,7 +61,7 @@ class ListingWithoutNPlusOneTestCase(TestCase):
             product = Product.objects.create(
                 company=self.company, name=f'Product {i}', price=10, minimum_quantity=5
             )
-            StockMovement.objects.create(product=product, type='IN', quantity=50)
+            StockMovement.objects.create(product=product, type='IN', quantity=50, unit_price=product.price)
 
     def test_listing_uses_a_single_aggregation_query(self):
         with CaptureQueriesContext(connection) as ctx:
@@ -96,7 +99,7 @@ class RegisterMovementServiceTestCase(TestCase):
         self.product = Product.objects.create(
             company=self.company, name='M6 Screw', price=0.50, minimum_quantity=10
         )
-        StockMovement.objects.create(product=self.product, type='IN', quantity=20)
+        StockMovement.objects.create(product=self.product, type='IN', quantity=20, unit_price=self.product.price)
 
     def test_valid_out_movement_is_registered(self):
         register_movement(self.product.id, movement_type='OUT', quantity=5)
@@ -152,6 +155,30 @@ class RegisterMovementServiceTestCase(TestCase):
             register_movement(empty_product.id, movement_type='IN', quantity=5)
 
         self.assertEqual(empty_product.movements.count(), 0)
+
+    def test_out_movement_defaults_is_sale_true(self):
+        movement = register_movement(self.product.id, movement_type='OUT', quantity=5)
+        self.assertTrue(movement.is_sale)
+
+    def test_out_movement_can_be_marked_as_not_a_sale(self):
+        movement = register_movement(self.product.id, movement_type='OUT', quantity=5, is_sale=False)
+        self.assertFalse(movement.is_sale)
+
+    def test_in_movement_is_always_not_a_sale_even_if_requested_true(self):
+        # An entrada is never a venda - the service must override whatever
+        # the caller passes in, not trust it (same philosophy as the other
+        # business rules in this function).
+        movement = register_movement(self.product.id, movement_type='IN', quantity=5, is_sale=True)
+        self.assertFalse(movement.is_sale)
+
+    def test_unit_price_is_frozen_at_movement_time(self):
+        movement = register_movement(self.product.id, movement_type='OUT', quantity=5)
+        self.assertEqual(movement.unit_price, self.product.price)
+
+        self.product.price = 999
+        self.product.save(update_fields=['price'])
+        movement.refresh_from_db()
+        self.assertNotEqual(movement.unit_price, self.product.price)
 
 
 class LoginRequiredTestCase(TestCase):
@@ -257,6 +284,19 @@ class MovementFormTestCase(TestCase):
         self.assertFalse(form.is_valid())
         self.assertIn('quantity', form.errors)
 
+    def test_is_sale_defaults_to_false_when_checkbox_is_not_submitted(self):
+        # An unchecked HTML checkbox sends no key at all in the POST data -
+        # this confirms the form still validates (is_sale is required=False)
+        # and reads that absence as False, not as a validation error.
+        form = MovementForm(data={'type': 'OUT', 'quantity': '5', 'reason': ''})
+        self.assertTrue(form.is_valid())
+        self.assertFalse(form.cleaned_data['is_sale'])
+
+    def test_is_sale_true_when_checkbox_is_submitted(self):
+        form = MovementForm(data={'type': 'OUT', 'quantity': '5', 'reason': '', 'is_sale': 'on'})
+        self.assertTrue(form.is_valid())
+        self.assertTrue(form.cleaned_data['is_sale'])
+
     def test_valid_data_is_accepted(self):
         form = MovementForm(data={'type': 'OUT', 'quantity': '3', 'reason': 'Venda'})
         self.assertTrue(form.is_valid())
@@ -276,17 +316,17 @@ class StockMovementConstraintsTestCase(TestCase):
     def test_non_positive_quantity_is_rejected_at_db_level(self):
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
-                StockMovement.objects.create(product=self.product, type='IN', quantity=0)
+                StockMovement.objects.create(product=self.product, type='IN', quantity=0, unit_price=self.product.price)
 
     def test_negative_quantity_is_rejected_at_db_level(self):
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
-                StockMovement.objects.create(product=self.product, type='IN', quantity=-5)
+                StockMovement.objects.create(product=self.product, type='IN', quantity=-5, unit_price=self.product.price)
 
     def test_invalid_type_is_rejected_at_db_level(self):
         with self.assertRaises(IntegrityError):
             with transaction.atomic():
-                StockMovement.objects.create(product=self.product, type='XX', quantity=5)
+                StockMovement.objects.create(product=self.product, type='XX', quantity=5, unit_price=self.product.price)
 
 
 class ProductSoftDeleteTestCase(TestCase):
@@ -300,7 +340,7 @@ class ProductSoftDeleteTestCase(TestCase):
         self.product = Product.objects.create(
             company=self.company, name='M6 Screw', price=0.50, minimum_quantity=10
         )
-        StockMovement.objects.create(product=self.product, type='IN', quantity=10)
+        StockMovement.objects.create(product=self.product, type='IN', quantity=10, unit_price=self.product.price)
         self.user = User.objects.create_user(username='juliana', password='senha-teste-123')
         Membership.objects.create(user=self.user, company=self.company)
         gestor_group = Group.objects.get(name='Gestor')
@@ -347,7 +387,7 @@ class ProductDeletionProtectionTestCase(TestCase):
         product = Product.objects.create(
             company=self.company, name='M6 Screw', price=0.50, minimum_quantity=10
         )
-        StockMovement.objects.create(product=product, type='IN', quantity=10)
+        StockMovement.objects.create(product=product, type='IN', quantity=10, unit_price=product.price)
 
         with self.assertRaises(ProtectedError):
             product.delete()
@@ -378,7 +418,7 @@ class StockMovementAdminPermissionsTestCase(TestCase):
             company=self.company, name='M6 Screw', price=0.50, minimum_quantity=10
         )
         self.movement = StockMovement.objects.create(
-            product=self.product, type='IN', quantity=10
+            product=self.product, type='IN', quantity=10, unit_price=self.product.price
         )
         self.client.force_login(self.superuser)
 
@@ -468,7 +508,7 @@ class ConcurrentStockMovementTestCase(TransactionTestCase):
         self.product = Product.objects.create(
             company=self.company, name='M6 Screw', price=0.50, minimum_quantity=10
         )
-        StockMovement.objects.create(product=self.product, type='IN', quantity=20)
+        StockMovement.objects.create(product=self.product, type='IN', quantity=20, unit_price=self.product.price)
 
     @skipUnlessDBFeature('has_select_for_update')
     def test_concurrent_out_movements_do_not_oversell_stock(self):
@@ -509,7 +549,7 @@ class MovementCreateViewTestCase(TestCase):
         self.product = Product.objects.create(
             company=self.company, name='M6 screw', price=0.50, minimum_quantity=10
         )
-        StockMovement.objects.create(product=self.product, type='IN', quantity=20)
+        StockMovement.objects.create(product=self.product, type='IN', quantity=20, unit_price=self.product.price)
         self.user = User.objects.create_user(username='juliana', password='senha-teste-123')
         Membership.objects.create(user=self.user, company=self.company)
         self.client.force_login(self.user)
@@ -613,7 +653,7 @@ class CrossCompanyIsolationTestCase(TestCase):
         self.product_b = Product.objects.create(
             company=self.company_b, name='Produto da Empresa B', price=10, minimum_quantity=1
         )
-        StockMovement.objects.create(product=self.product_b, type='IN', quantity=5)
+        StockMovement.objects.create(product=self.product_b, type='IN', quantity=5, unit_price=self.product_b.price)
 
     def test_product_detail_of_other_company_is_404(self):
         response = self.client.get(reverse('product_detail', args=[self.product_b.id]))
@@ -1160,19 +1200,19 @@ class DashboardViewTestCase(TestCase):
         self.product_ok = Product.objects.create(
             company=self.company, name='Produto OK', price=10, minimum_quantity=5
         )
-        StockMovement.objects.create(product=self.product_ok, type='IN', quantity=20)
+        StockMovement.objects.create(product=self.product_ok, type='IN', quantity=20, unit_price=self.product_ok.price)
 
         self.product_critico = Product.objects.create(
             company=self.company, name='Produto Crítico', price=Decimal('2.50'), minimum_quantity=10
         )
-        StockMovement.objects.create(product=self.product_critico, type='IN', quantity=3)
+        StockMovement.objects.create(product=self.product_critico, type='IN', quantity=3, unit_price=self.product_critico.price)
 
         # produto e movimentação de outra empresa - não deve entrar em
         # nenhuma das contas acima
         other_product = Product.objects.create(
             company=self.other_company, name='Produto de Outra Empresa', price=100, minimum_quantity=0
         )
-        StockMovement.objects.create(product=other_product, type='IN', quantity=50)
+        StockMovement.objects.create(product=other_product, type='IN', quantity=50, unit_price=other_product.price)
 
     def test_total_stock_value_is_calculated_correctly(self):
         self.client.force_login(self.user)
@@ -1190,6 +1230,108 @@ class DashboardViewTestCase(TestCase):
         self.client.force_login(self.user)
         response = self.client.get(reverse('dashboard'))
         self.assertEqual(response.context['movement_count'], 2)
+
+
+class SalesReportViewTestCase(TestCase):
+    """Covers #51: quantidade e valor vendido por produto, numa semana,
+    usando o unit_price congelado - não o preço atual do produto."""
+
+    def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
+        self.other_company = Company.objects.create(name='Outra Empresa')
+
+        self.user = User.objects.create_user(username='funcionario', password='senha-teste-123')
+        Membership.objects.create(user=self.user, company=self.company)
+
+        self.product = Product.objects.create(
+            company=self.company, name='Refrigerante', price=Decimal('5.00'), minimum_quantity=0
+        )
+        # estoque suficiente pras saídas registradas nos testes abaixo
+        register_movement(self.product.id, movement_type='IN', quantity=100)
+
+    def test_only_sales_are_counted_not_losses(self):
+        register_movement(self.product.id, movement_type='OUT', quantity=3, is_sale=True)
+        register_movement(self.product.id, movement_type='OUT', quantity=2, is_sale=False)
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('sales_report'))
+
+        # só a venda entra - 3 unidades * R$5.00, a perda de 2 fica de fora
+        self.assertEqual(response.context['total_quantity'], 3)
+        self.assertEqual(response.context['total_value'], Decimal('15.00'))
+
+    def test_multiple_sales_of_same_product_are_summed(self):
+        register_movement(self.product.id, movement_type='OUT', quantity=3, is_sale=True)
+        register_movement(self.product.id, movement_type='OUT', quantity=4, is_sale=True)
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('sales_report'))
+
+        sales = list(response.context['sales_by_product'])
+        self.assertEqual(len(sales), 1)
+        self.assertEqual(sales[0]['quantity_sold'], 7)
+        self.assertEqual(sales[0]['total_value'], Decimal('35.00'))
+
+    def test_other_companys_sales_are_excluded(self):
+        other_product = Product.objects.create(
+            company=self.other_company, name='Produto de Outra Empresa', price=50, minimum_quantity=0
+        )
+        register_movement(other_product.id, movement_type='IN', quantity=10)
+        register_movement(other_product.id, movement_type='OUT', quantity=1, is_sale=True)
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('sales_report'))
+
+        self.assertEqual(response.context['total_quantity'], 0)
+
+    def test_sale_from_last_week_is_excluded_from_current_week_view(self):
+        movement = register_movement(self.product.id, movement_type='OUT', quantity=3, is_sale=True)
+        last_week = timezone.now() - timedelta(days=timezone.localdate().weekday() + 1)
+        # .update() pula o auto_now_add do campo date, que só se aplica
+        # em .save() - é o jeito de simular uma movimentação antiga em teste.
+        StockMovement.objects.filter(pk=movement.pk).update(date=last_week)
+
+        self.client.force_login(self.user)
+
+        current_week_response = self.client.get(reverse('sales_report'))
+        self.assertEqual(current_week_response.context['total_quantity'], 0)
+
+        previous_week_response = self.client.get(reverse('sales_report'), {'offset': -1})
+        self.assertEqual(previous_week_response.context['total_quantity'], 3)
+
+    def test_monthly_period_includes_sales_from_different_weeks_of_the_month(self):
+        # Uma venda "hoje" e outra no primeiro dia do mês - podem cair em
+        # semanas ISO diferentes, mas o agrupamento mensal precisa somar
+        # as duas do mesmo jeito.
+        first_of_month = timezone.localdate().replace(day=1)
+
+        register_movement(self.product.id, movement_type='OUT', quantity=2, is_sale=True)
+        movement_early = register_movement(self.product.id, movement_type='OUT', quantity=5, is_sale=True)
+        StockMovement.objects.filter(pk=movement_early.pk).update(
+            date=timezone.make_aware(datetime.combine(first_of_month, datetime.min.time()))
+        )
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('sales_report'), {'periodo': 'mes'})
+
+        self.assertEqual(response.context['total_quantity'], 7)
+
+    def test_sale_from_last_month_is_excluded_from_current_month_view(self):
+        movement = register_movement(self.product.id, movement_type='OUT', quantity=4, is_sale=True)
+        last_month = _add_months(timezone.localdate().replace(day=1), -1)
+        StockMovement.objects.filter(pk=movement.pk).update(
+            date=timezone.make_aware(datetime.combine(last_month, datetime.min.time()))
+        )
+
+        self.client.force_login(self.user)
+
+        current_month_response = self.client.get(reverse('sales_report'), {'periodo': 'mes'})
+        self.assertEqual(current_month_response.context['total_quantity'], 0)
+
+        previous_month_response = self.client.get(
+            reverse('sales_report'), {'periodo': 'mes', 'offset': -1}
+        )
+        self.assertEqual(previous_month_response.context['total_quantity'], 4)
 
 
 class CreateSuperuserIfNoneExistsCommandTestCase(TestCase):

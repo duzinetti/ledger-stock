@@ -103,6 +103,12 @@ class MovementForm(forms.Form):
         max_length=200, required=False, label='Motivo',
         widget=forms.TextInput(attrs={'class': 'form-control'}),
     )
+    is_sale = forms.BooleanField(
+        required=False, initial=True, label='Foi uma venda?',
+        help_text='Desmarque se essa saída não for uma venda (perda, ajuste, devolução). '
+                   'Não se aplica a entradas.',
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+    )
 
 
 class EmployeeCreateForm(forms.Form):
