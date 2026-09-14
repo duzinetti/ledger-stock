@@ -62,7 +62,7 @@ class InactiveProductError(Exception):
         )
 
 
-def register_movement(product_id, movement_type, quantity, reason='', user=None):
+def register_movement(product_id, movement_type, quantity, reason='', user=None, is_sale=True):
     """Registers a stock movement safely under concurrent access.
 
     Uses select_for_update() inside a transaction to lock the
@@ -108,6 +108,8 @@ def register_movement(product_id, movement_type, quantity, reason='', user=None)
             quantity=quantity,
             reason=reason,
             user=user,
+            is_sale=is_sale if movement_type == MovementType.OUT else False,
+            unit_price=product.price,
         )
 
     return movement

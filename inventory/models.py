@@ -163,6 +163,8 @@ class StockMovement(models.Model):
         blank=True,
         related_name='movements',
     )
+    is_sale = models.BooleanField(default=True)
+    unit_price = models.DecimalField(max_digits=10, decimal_places=2)
 
     class Meta:
         indexes = [

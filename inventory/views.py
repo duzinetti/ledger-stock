@@ -282,6 +282,7 @@ def movement_create(request, product_id):
                 quantity=form.cleaned_data['quantity'],
                 reason=form.cleaned_data['reason'],
                 user=request.user,
+                is_sale=form.cleaned_data['is_sale'],
             )
         except InsufficientStockError as error:
             form.add_error(
@@ -364,6 +365,85 @@ def dashboard(request):
         'chart_labels': dias,
         'chart_entradas': entradas,
         'chart_saidas': saidas,
+    })
+
+
+def _add_months(date_obj, months):
+    """Adds (or subtracts, if negative) whole calendar months to a date,
+    always landing on day 1 of the resulting month. Used to walk the
+    sales report backward/forward by month without pulling in a
+    dependency (python-dateutil) just for this one calculation.
+    """
+    month_index = date_obj.month - 1 + months
+    year = date_obj.year + month_index // 12
+    month = month_index % 12 + 1
+    return date_obj.replace(year=year, month=month, day=1)
+
+
+@login_required
+def sales_report(request):
+    """Sales report grouped by product (#51), by week or by calendar
+    month.
+
+    Shows how much of each product was sold, and the revenue, in a
+    given period. Only counts movements with is_sale=True - an entrada
+    is never a sale (enforced in services.register_movement), and a
+    saída marked as loss/adjustment is excluded on purpose so the
+    report reflects real revenue, not every stock decrease.
+
+    Uses the frozen StockMovement.unit_price (not the current
+    Product.price) so a past period's report stays correct even if a
+    product's price changes later.
+    """
+    company = request.user.membership.company
+
+    period_type = request.GET.get('periodo', 'semana')
+    if period_type not in ('semana', 'mes'):
+        period_type = 'semana'
+
+    try:
+        offset = int(request.GET.get('offset', 0))
+    except ValueError:
+        offset = 0
+
+    today = timezone.localdate()
+    if period_type == 'mes':
+        period_start = _add_months(today.replace(day=1), offset)
+        period_end = _add_months(period_start, 1)
+    else:
+        period_start = today - timedelta(days=today.weekday()) + timedelta(weeks=offset)
+        period_end = period_start + timedelta(days=7)
+
+    sales_in_period = StockMovement.objects.filter(
+        product__company=company,
+        is_sale=True,
+        date__date__gte=period_start,
+        date__date__lt=period_end,
+    )
+
+    totals = sales_in_period.aggregate(
+        quantity_total=Sum('quantity'),
+        value_total=Sum(F('quantity') * F('unit_price'), output_field=DecimalField(max_digits=12, decimal_places=2)),
+    )
+
+    sales_by_product = (
+        sales_in_period
+        .values('product__id', 'product__name')
+        .annotate(
+            quantity_sold=Sum('quantity'),
+            total_value=Sum(F('quantity') * F('unit_price'), output_field=DecimalField(max_digits=12, decimal_places=2)),
+        )
+        .order_by('-total_value')
+    )
+
+    return render(request, 'inventory/sales_report.html', {
+        'sales_by_product': sales_by_product,
+        'total_quantity': totals['quantity_total'] or 0,
+        'total_value': totals['value_total'] or 0,
+        'period_type': period_type,
+        'period_start': period_start,
+        'period_end': period_end - timedelta(days=1),
+        'offset': offset,
     })
 
 
