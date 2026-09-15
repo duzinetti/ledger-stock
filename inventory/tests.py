@@ -38,12 +38,12 @@ class CurrentQuantityTestCase(TestCase):
         )
 
     def test_current_quantity_sums_in_and_out_movements(self):
-        StockMovement.objects.create(product=self.product, type='IN', quantity=100, unit_price=self.product.price)
+        StockMovement.objects.create(product=self.product, type='IN', quantity=100, unit_price=self.product.price, is_sale=False)
         StockMovement.objects.create(product=self.product, type='OUT', quantity=30, unit_price=self.product.price)
         self.assertEqual(self.product.current_quantity, 70)
 
     def test_low_stock_when_below_minimum(self):
-        StockMovement.objects.create(product=self.product, type='IN', quantity=5, unit_price=self.product.price)
+        StockMovement.objects.create(product=self.product, type='IN', quantity=5, unit_price=self.product.price, is_sale=False)
         self.assertTrue(self.product.low_stock)
 
     def test_with_current_quantity_for_product_with_no_movements(self):
@@ -61,7 +61,7 @@ class ListingWithoutNPlusOneTestCase(TestCase):
             product = Product.objects.create(
                 company=self.company, name=f'Product {i}', price=10, minimum_quantity=5
             )
-            StockMovement.objects.create(product=product, type='IN', quantity=50, unit_price=product.price)
+            StockMovement.objects.create(product=product, type='IN', quantity=50, unit_price=product.price, is_sale=False)
 
     def test_listing_uses_a_single_aggregation_query(self):
         with CaptureQueriesContext(connection) as ctx:
@@ -99,7 +99,7 @@ class RegisterMovementServiceTestCase(TestCase):
         self.product = Product.objects.create(
             company=self.company, name='M6 Screw', price=0.50, minimum_quantity=10
         )
-        StockMovement.objects.create(product=self.product, type='IN', quantity=20, unit_price=self.product.price)
+        StockMovement.objects.create(product=self.product, type='IN', quantity=20, unit_price=self.product.price, is_sale=False)
 
     def test_valid_out_movement_is_registered(self):
         register_movement(self.product.id, movement_type='OUT', quantity=5)
@@ -328,6 +328,17 @@ class StockMovementConstraintsTestCase(TestCase):
             with transaction.atomic():
                 StockMovement.objects.create(product=self.product, type='XX', quantity=5, unit_price=self.product.price)
 
+    def test_is_sale_true_on_an_in_movement_is_rejected_at_db_level(self):
+        # "Entrada nunca é venda" - services.register_movement já força
+        # isso, mas essa constraint garante mesmo pra escrita que
+        # contorna o service (admin, shell, futura API).
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                StockMovement.objects.create(
+                    product=self.product, type='IN', quantity=5,
+                    unit_price=self.product.price, is_sale=True,
+                )
+
 
 class ProductSoftDeleteTestCase(TestCase):
     """Covers PRD §8/§10.2's soft-delete decision: a "deleted" product is
@@ -340,7 +351,7 @@ class ProductSoftDeleteTestCase(TestCase):
         self.product = Product.objects.create(
             company=self.company, name='M6 Screw', price=0.50, minimum_quantity=10
         )
-        StockMovement.objects.create(product=self.product, type='IN', quantity=10, unit_price=self.product.price)
+        StockMovement.objects.create(product=self.product, type='IN', quantity=10, unit_price=self.product.price, is_sale=False)
         self.user = User.objects.create_user(username='juliana', password='senha-teste-123')
         Membership.objects.create(user=self.user, company=self.company)
         gestor_group = Group.objects.get(name='Gestor')
@@ -387,7 +398,7 @@ class ProductDeletionProtectionTestCase(TestCase):
         product = Product.objects.create(
             company=self.company, name='M6 Screw', price=0.50, minimum_quantity=10
         )
-        StockMovement.objects.create(product=product, type='IN', quantity=10, unit_price=product.price)
+        StockMovement.objects.create(product=product, type='IN', quantity=10, unit_price=product.price, is_sale=False)
 
         with self.assertRaises(ProtectedError):
             product.delete()
@@ -418,7 +429,7 @@ class StockMovementAdminPermissionsTestCase(TestCase):
             company=self.company, name='M6 Screw', price=0.50, minimum_quantity=10
         )
         self.movement = StockMovement.objects.create(
-            product=self.product, type='IN', quantity=10, unit_price=self.product.price
+            product=self.product, type='IN', quantity=10, unit_price=self.product.price, is_sale=False
         )
         self.client.force_login(self.superuser)
 
@@ -508,7 +519,7 @@ class ConcurrentStockMovementTestCase(TransactionTestCase):
         self.product = Product.objects.create(
             company=self.company, name='M6 Screw', price=0.50, minimum_quantity=10
         )
-        StockMovement.objects.create(product=self.product, type='IN', quantity=20, unit_price=self.product.price)
+        StockMovement.objects.create(product=self.product, type='IN', quantity=20, unit_price=self.product.price, is_sale=False)
 
     @skipUnlessDBFeature('has_select_for_update')
     def test_concurrent_out_movements_do_not_oversell_stock(self):
@@ -549,7 +560,7 @@ class MovementCreateViewTestCase(TestCase):
         self.product = Product.objects.create(
             company=self.company, name='M6 screw', price=0.50, minimum_quantity=10
         )
-        StockMovement.objects.create(product=self.product, type='IN', quantity=20, unit_price=self.product.price)
+        StockMovement.objects.create(product=self.product, type='IN', quantity=20, unit_price=self.product.price, is_sale=False)
         self.user = User.objects.create_user(username='juliana', password='senha-teste-123')
         Membership.objects.create(user=self.user, company=self.company)
         self.client.force_login(self.user)
@@ -653,7 +664,7 @@ class CrossCompanyIsolationTestCase(TestCase):
         self.product_b = Product.objects.create(
             company=self.company_b, name='Produto da Empresa B', price=10, minimum_quantity=1
         )
-        StockMovement.objects.create(product=self.product_b, type='IN', quantity=5, unit_price=self.product_b.price)
+        StockMovement.objects.create(product=self.product_b, type='IN', quantity=5, unit_price=self.product_b.price, is_sale=False)
 
     def test_product_detail_of_other_company_is_404(self):
         response = self.client.get(reverse('product_detail', args=[self.product_b.id]))
@@ -1200,19 +1211,19 @@ class DashboardViewTestCase(TestCase):
         self.product_ok = Product.objects.create(
             company=self.company, name='Produto OK', price=10, minimum_quantity=5
         )
-        StockMovement.objects.create(product=self.product_ok, type='IN', quantity=20, unit_price=self.product_ok.price)
+        StockMovement.objects.create(product=self.product_ok, type='IN', quantity=20, unit_price=self.product_ok.price, is_sale=False)
 
         self.product_critico = Product.objects.create(
             company=self.company, name='Produto Crítico', price=Decimal('2.50'), minimum_quantity=10
         )
-        StockMovement.objects.create(product=self.product_critico, type='IN', quantity=3, unit_price=self.product_critico.price)
+        StockMovement.objects.create(product=self.product_critico, type='IN', quantity=3, unit_price=self.product_critico.price, is_sale=False)
 
         # produto e movimentação de outra empresa - não deve entrar em
         # nenhuma das contas acima
         other_product = Product.objects.create(
             company=self.other_company, name='Produto de Outra Empresa', price=100, minimum_quantity=0
         )
-        StockMovement.objects.create(product=other_product, type='IN', quantity=50, unit_price=other_product.price)
+        StockMovement.objects.create(product=other_product, type='IN', quantity=50, unit_price=other_product.price, is_sale=False)
 
     def test_total_stock_value_is_calculated_correctly(self):
         self.client.force_login(self.user)
