@@ -184,6 +184,14 @@ class StockMovement(models.Model):
                 check=models.Q(type__in=MovementType.values),
                 name='stockmovement_type_valid',
             ),
+            models.CheckConstraint(
+                # "Entrada nunca é venda" já é forçado em
+                # services.register_movement, mas só protege quem passa
+                # por ali - essa constraint garante a mesma regra mesmo
+                # pra escrita direta (admin, shell, uma futura API).
+                check=models.Q(type=MovementType.OUT) | models.Q(is_sale=False),
+                name='stockmovement_is_sale_only_on_out',
+            ),
         ]
 
     def __str__(self):
