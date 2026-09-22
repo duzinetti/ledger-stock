@@ -106,17 +106,21 @@ HTTPS.
 Alinhado à Seção 5 do PRD. Só começa depois do MVP estar deployado —
 o PRD é explícito que "done" é o MVP no ar, não tudo isso completo.
 
-- [ ] Dashboard com métricas agregadas (valor total, produtos
+- [x] Dashboard com métricas agregadas (valor total, produtos
       críticos, gráfico de movimentação) — reaproveitando
       `with_current_quantity()` para não reintroduzir N+1
 - [x] Permissões por papel: `Group` Operador vs. Gestor — adiantado
       pro pacote de multi-tenancy, ver MVP.3
-- [ ] Categoria estruturada (migrar de texto livre para model
+- [x] Categoria estruturada (migrar de texto livre para model
       `Categoria`, corrigindo a dívida assumida no MVP)
-- [ ] Movimentação: campo `is_sale` (boolean, default `True`) +
-      `unit_price` congelado no momento da movimentação, para viabilizar
-      relatório de vendas por período (`#51`) — decisão registrada:
-      **não** estruturar `motivo` em categorias, ver `#51`
+- [x] Movimentação: campo `is_sale` (boolean, default `True`) +
+      `unit_price` congelado no momento da movimentação + relatório de
+      vendas por semana/mês por produto (`#51`) — decisão registrada:
+      **não** estruturar `motivo` em categorias, ver `#51`. Um bug real
+      foi encontrado e corrigido depois do deploy: a migration que criou
+      `is_sale` aplicou `default=True` a movimentações antigas (inclusive
+      Entradas), corrigido com migration de dados + `CheckConstraint`
+      de banco (`type='OUT' OR is_sale=False`)
 - [ ] API REST (DRF + JWT), reaproveitando o `services.py` já existente
 - [ ] Exportação de relatório (CSV/PDF)
 - [ ] Reskin do admin (`django-jazzmin`) e estilização geral
@@ -181,12 +185,17 @@ Alinhado à Seção 5 do PRD.
 
 ## Próxima ação recomendada
 
-Os dois bloqueios estão resolvidos, a MVP.2 está completa (Postgres/
-Neon + `python-decouple`, PR #53) e a MVP.4.5 está completa
-(estilização das telas). Na MVP.5, o checklist de segurança mínima e
-os ajustes de deploy (HTTPS, cookies, static files, rate limiting,
-páginas de erro, `robots.txt`, política de privacidade, auditoria de
-dependências) já estão prontos na branch `feat/deploy-security-prep`.
-Falta só criar o serviço no Render de fato, configurar as variáveis
-de ambiente de produção e validar o HTTPS end-to-end pra fechar o
-MVP.
+MVP no ar em produção (Render + Neon Postgres, `v1.0.0`,
+`ledger-stock.onrender.com`), com rate limiting (django-axes),
+dashboard, categoria estruturada e relatório de vendas (semanal/mensal
+por produto) já entregues e testados (115 testes).
+
+V2 restante em aberto: `#48` PWA, `#37` reskin do admin,
+`#36` exportação de relatório (CSV/PDF), `#35` API REST. Recomendação:
+**`#36` exportação de relatório em seguida** — é extensão direta do
+relatório de vendas que acabou de sair (mesma tela, só adiciona um
+botão de download), serve a loja piloto de verdade (levar o relatório
+pra contador, guardar registro fora do sistema), e é escopo pequeno.
+`#37` (reskin do admin) tem prioridade baixa porque o admin é
+dev-only (só superusuário, não é tela de uso diário da loja). `#35`
+(API REST) continua por último - não existe consumidor real ainda.
