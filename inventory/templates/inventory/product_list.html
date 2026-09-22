@@ -36,7 +36,7 @@
                 <tr>
                     <td class="numeric">{{ product.id }}</td>
                     <td>{{ product.name }}</td>
-                    <td>{{ product.category }}</td>
+                    <td>{% if product.category %}<span class="category-pill">{{ product.category }}</span>{% endif %}</td>
                     <td class="numeric">R$ {{ product.price }}</td>
                     <td class="numeric">
                         {{ product.current_qty }}
