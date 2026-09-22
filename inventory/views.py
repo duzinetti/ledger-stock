@@ -461,6 +461,20 @@ def sales_report(request):
     })
 
 
+def _csv_safe(value):
+    """Neutralizes CSV/formula injection (CWE-1236): a cell that starts
+    with =, +, -, or @ can be interpreted as a formula by Excel/Sheets
+    when the file is opened - dangerous when the value comes from
+    user input (here, a product name someone typed in). Prefixing
+    with a single quote forces spreadsheet apps to treat it as plain
+    text instead of executing it.
+    """
+    text = str(value)
+    if text and text[0] in ('=', '+', '-', '@'):
+        return "'" + text
+    return text
+
+
 @login_required
 def sales_report_export_csv(request):
     company = request.user.membership.company
@@ -482,7 +496,9 @@ def sales_report_export_csv(request):
     writer = csv.writer(response)
     writer.writerow(['Produto', 'Quantidade vendida', 'Valor total'])
     for item in data['sales_by_product']:
-        writer.writerow([item['product__name'], item['quantity_sold'], item['total_value']])
+        writer.writerow([
+            _csv_safe(item['product__name']), item['quantity_sold'], item['total_value'],
+        ])
     writer.writerow(['Total', data['total_quantity'], data['total_value']])
 
     return response 
