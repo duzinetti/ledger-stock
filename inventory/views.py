@@ -39,6 +39,7 @@ from .services import (
 )
 from .decorators import gestor_required
 
+import csv
 
 def robots_txt(request):
     """Bloqueia indexação por robôs de busca - o app inteiro fica atrás
@@ -379,33 +380,9 @@ def _add_months(date_obj, months):
     month = month_index % 12 + 1
     return date_obj.replace(year=year, month=month, day=1)
 
-
-@login_required
-def sales_report(request):
-    """Sales report grouped by product (#51), by week or by calendar
-    month.
-
-    Shows how much of each product was sold, and the revenue, in a
-    given period. Only counts movements with is_sale=True - an entrada
-    is never a sale (enforced in services.register_movement), and a
-    saída marked as loss/adjustment is excluded on purpose so the
-    report reflects real revenue, not every stock decrease.
-
-    Uses the frozen StockMovement.unit_price (not the current
-    Product.price) so a past period's report stays correct even if a
-    product's price changes later.
-    """
-    company = request.user.membership.company
-
-    period_type = request.GET.get('periodo', 'semana')
-    if period_type not in ('semana', 'mes'):
-        period_type = 'semana'
-
-    try:
-        offset = int(request.GET.get('offset', 0))
-    except ValueError:
-        offset = 0
-
+def _get_sales_report_data(company, period_type, offset):
+    """Builds the sales report data for a period - shared by both the
+    HTML screen and the CSV export, so the query isn't duplicated."""
     today = timezone.localdate()
     if period_type == 'mes':
         period_start = _add_months(today.replace(day=1), offset)
@@ -436,15 +413,79 @@ def sales_report(request):
         .order_by('-total_value')
     )
 
-    return render(request, 'inventory/sales_report.html', {
+    return {
         'sales_by_product': sales_by_product,
         'total_quantity': totals['quantity_total'] or 0,
         'total_value': totals['value_total'] or 0,
-        'period_type': period_type,
         'period_start': period_start,
-        'period_end': period_end - timedelta(days=1),
+        'period_end': period_end,
+    }
+
+
+@login_required
+def sales_report(request):
+    """Sales report grouped by product (#51), by week or by calendar
+    month.
+
+    Shows how much of each product was sold, and the revenue, in a
+    given period. Only counts movements with is_sale=True - an entrada
+    is never a sale (enforced in services.register_movement), and a
+    saída marked as loss/adjustment is excluded on purpose so the
+    report reflects real revenue, not every stock decrease.
+
+    Uses the frozen StockMovement.unit_price (not the current
+    Product.price) so a past period's report stays correct even if a
+    product's price changes later.
+    """
+    company = request.user.membership.company
+
+    period_type = request.GET.get('periodo', 'semana')
+    if period_type not in ('semana', 'mes'):
+        period_type = 'semana'
+
+    try:
+        offset = int(request.GET.get('offset', 0))
+    except ValueError:
+        offset = 0
+
+    data = _get_sales_report_data(company, period_type, offset)
+
+    return render(request, 'inventory/sales_report.html', {
+        'sales_by_product': data['sales_by_product'],
+        'total_quantity': data['total_quantity'],
+        'total_value': data['total_value'],
+        'period_type': period_type,
+        'period_start': data['period_start'],
+        'period_end': data['period_end'] - timedelta(days=1),
         'offset': offset,
     })
+
+
+@login_required
+def sales_report_export_csv(request):
+    company = request.user.membership.company
+    period_type = request.GET.get('periodo', 'semana')
+    if period_type not in ('semana', 'mes'):
+        period_type = 'semana'
+    try:
+        offset = int(request.GET.get('offset', 0))
+    except ValueError:
+        offset = 0
+
+    data = _get_sales_report_data(company, period_type, offset)
+
+    response = HttpResponse(content_type="text/csv")
+    filename = f"vendas_{period_type}_{data['period_start'].isoformat()}.csv"
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    response.write('\ufeff')
+
+    writer = csv.writer(response)
+    writer.writerow(['Produto', 'Quantidade vendida', 'Valor total'])
+    for item in data['sales_by_product']:
+        writer.writerow([item['product__name'], item['quantity_sold'], item['total_value']])
+    writer.writerow(['Total', data['total_quantity'], data['total_value']])
+
+    return response 
 
 
 @login_required
