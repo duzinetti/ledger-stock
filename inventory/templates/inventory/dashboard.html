@@ -7,24 +7,39 @@
         <div class="col-12 col-md-4">
             <div class="card h-100">
                 <div class="card-body">
+                    <div class="kpi-icon accent mb-3">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
+                        </svg>
+                    </div>
                     <p class="text-muted mb-1">Valor total em estoque</p>
-                    <p class="numeric fs-3 mb-0">R$ {{ total_value }}</p>
+                    <p class="kpi-value numeric mb-0">R$ {{ total_value }}</p>
                 </div>
             </div>
         </div>
         <div class="col-12 col-md-4">
             <div class="card h-100">
                 <div class="card-body">
+                    <div class="kpi-icon danger mb-3">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                        </svg>
+                    </div>
                     <p class="text-muted mb-1">Produtos críticos</p>
-                    <p class="numeric fs-3 mb-0">{{ critical_count }}</p>
+                    <p class="kpi-value numeric mb-0">{{ critical_count }}</p>
                 </div>
             </div>
         </div>
         <div class="col-12 col-md-4">
             <div class="card h-100">
                 <div class="card-body">
+                    <div class="kpi-icon create mb-3">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                        </svg>
+                    </div>
                     <p class="text-muted mb-1">Movimentações (30 dias)</p>
-                    <p class="numeric fs-3 mb-0">{{ movement_count }}</p>
+                    <p class="kpi-value numeric mb-0">{{ movement_count }}</p>
                 </div>
             </div>
         </div>
@@ -59,7 +74,7 @@
                     {% for product in critical_products %}
                     <tr>
                         <td>{{ product.name }}</td>
-                        <td>{{ product.category }}</td>
+                        <td>{% if product.category %}<span class="category-pill">{{ product.category }}</span>{% endif %}</td>
                         <td class="numeric">{{ product.current_qty }}</td>
                         <td class="numeric">{{ product.minimum_quantity }}</td>
                         <td class="text-end">
