@@ -1396,6 +1396,23 @@ class SalesReportCsvExportTestCase(TestCase):
 
         self.assertNotIn('Produto de Outra Empresa', body)
 
+    def test_product_name_starting_with_equals_is_neutralized(self):
+        # CWE-1236 (CSV/formula injection): a product named "=cmd|..." or
+        # "=HYPERLINK(...)" could run as a formula if opened raw in Excel.
+        # sales_report_export_csv must prefix it with a quote so it's
+        # always read as plain text, never executed.
+        formula_product = Product.objects.create(
+            company=self.company, name='=cmd|calc!A1', price=Decimal('10.00'), minimum_quantity=0
+        )
+        register_movement(formula_product.id, movement_type='IN', quantity=10)
+        register_movement(formula_product.id, movement_type='OUT', quantity=1, is_sale=True)
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('sales_report_export_csv'))
+        body = response.content.decode('utf-8-sig')
+
+        self.assertIn("'=cmd|calc!A1", body)
+
 
 class CreateSuperuserIfNoneExistsCommandTestCase(TestCase):
     """Covers o management command usado no build do Render (tier
