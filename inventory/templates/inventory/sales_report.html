@@ -12,11 +12,15 @@
                 <p class="text-muted mb-0">{{ period_start|date:"d/m/Y" }} a {{ period_end|date:"d/m/Y" }}</p>
             {% endif %}
         </div>
-        <div class="btn-group" role="group" aria-label="Agrupar por semana ou mês">
-            <a href="?periodo=semana&offset=0"
-               class="btn btn-sm {% if period_type == 'semana' %}btn-secondary{% else %}btn-outline-secondary{% endif %}">Semana</a>
-            <a href="?periodo=mes&offset=0"
-               class="btn btn-sm {% if period_type == 'mes' %}btn-secondary{% else %}btn-outline-secondary{% endif %}">Mês</a>
+        <div class="d-flex align-items-center gap-2">
+            <a href="{% url 'sales_report_export_csv' %}?periodo={{ period_type }}&offset={{ offset }}"
+               class="btn btn-outline-secondary btn-sm">Baixar CSV</a>
+            <div class="btn-group" role="group" aria-label="Agrupar por semana ou mês">
+                <a href="?periodo=semana&offset=0"
+                   class="btn btn-sm {% if period_type == 'semana' %}btn-secondary{% else %}btn-outline-secondary{% endif %}">Semana</a>
+                <a href="?periodo=mes&offset=0"
+                   class="btn btn-sm {% if period_type == 'mes' %}btn-secondary{% else %}btn-outline-secondary{% endif %}">Mês</a>
+            </div>
         </div>
     </div>
 

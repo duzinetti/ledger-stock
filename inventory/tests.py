@@ -1345,6 +1345,58 @@ class SalesReportViewTestCase(TestCase):
         self.assertEqual(previous_month_response.context['total_quantity'], 4)
 
 
+class SalesReportCsvExportTestCase(TestCase):
+    """Covers the CSV export added alongside #51's sales report -
+    same business rules (is_sale filter, company isolation), just a
+    different output format."""
+
+    def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
+        self.other_company = Company.objects.create(name='Outra Empresa')
+
+        self.user = User.objects.create_user(username='funcionario', password='senha-teste-123')
+        Membership.objects.create(user=self.user, company=self.company)
+
+        self.product = Product.objects.create(
+            company=self.company, name='Refrigerante', price=Decimal('5.00'), minimum_quantity=0
+        )
+        register_movement(self.product.id, movement_type='IN', quantity=100)
+
+    def test_response_has_csv_content_type(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('sales_report_export_csv'))
+        self.assertEqual(response['Content-Type'], 'text/csv')
+
+    def test_response_has_attachment_filename(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('sales_report_export_csv'))
+        self.assertIn('attachment; filename=', response['Content-Disposition'])
+
+    def test_csv_body_lists_only_sales_not_losses(self):
+        register_movement(self.product.id, movement_type='OUT', quantity=3, is_sale=True)
+        register_movement(self.product.id, movement_type='OUT', quantity=2, is_sale=False)
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('sales_report_export_csv'))
+        body = response.content.decode('utf-8-sig')  # utf-8-sig descarta o BOM na leitura
+
+        self.assertIn('Refrigerante,3,15.00', body)
+        self.assertNotIn(',5,', body)  # 3+2 juntos não deveriam aparecer somados
+
+    def test_other_companys_sales_are_excluded(self):
+        other_product = Product.objects.create(
+            company=self.other_company, name='Produto de Outra Empresa', price=50, minimum_quantity=0
+        )
+        register_movement(other_product.id, movement_type='IN', quantity=10)
+        register_movement(other_product.id, movement_type='OUT', quantity=1, is_sale=True)
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse('sales_report_export_csv'))
+        body = response.content.decode('utf-8-sig')
+
+        self.assertNotIn('Produto de Outra Empresa', body)
+
+
 class CreateSuperuserIfNoneExistsCommandTestCase(TestCase):
     """Covers o management command usado no build do Render (tier
     gratuito não tem Shell pra rodar createsuperuser manualmente) -
