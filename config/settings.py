@@ -137,6 +137,7 @@ STATIC_URL = 'static/'
 # Onde `collectstatic` (rodado no build do Render) reúne os arquivos
 # estáticos pra servir - precisa existir pro whitenoise funcionar.
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+STATICFILES_DIRS = [BASE_DIR / 'static']
 STORAGES = {
     'default': {
         'BACKEND': 'django.core.files.storage.FileSystemStorage',
