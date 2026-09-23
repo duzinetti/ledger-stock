@@ -1,9 +1,18 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="pt-br" data-bs-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}LedgerStock{% endblock %}</title>
+
+    <!-- PWA: manifest descreve o app pro navegador (nome, ícones, cor
+         de tema) - é o que faz o Chrome oferecer "Instalar app".
+         theme-color colore a barra de status/título quando instalado. -->
+    <link rel="manifest" href="{% static 'manifest.json' %}">
+    <meta name="theme-color" content="#5e6ad2">
+    <link rel="icon" href="{% static 'icons/icon-192.png' %}">
+    <link rel="apple-touch-icon" href="{% static 'icons/icon-192.png' %}">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -499,6 +508,17 @@
                 if (btn.dataset.originalText) btn.textContent = btn.dataset.originalText;
             });
         });
+    </script>
+    <script>
+        // Feature check: navegadores antigos não têm a API - sem essa
+        // checagem, o registro quebraria neles. Registra o service
+        // worker em /service-worker.js (raiz, não /static/) pra ele
+        // controlar o site inteiro, não só a pasta de estáticos.
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', function () {
+                navigator.serviceWorker.register('/service-worker.js');
+            });
+        }
     </script>
     {% block extra_scripts %}{% endblock %}
 </body>

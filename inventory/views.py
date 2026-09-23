@@ -3,6 +3,7 @@ from datetime import timedelta
 from django.contrib.auth import logout
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.views import PasswordChangeView
+from django.contrib.staticfiles import finders
 from django.core.paginator import Paginator
 from django.db import transaction
 from django.db.models import (
@@ -48,6 +49,21 @@ def robots_txt(request):
     listar "/produtos/" ou dados de uma empresa cliente.
     """
     return HttpResponse('User-agent: *\nDisallow: /\n', content_type='text/plain')
+
+
+def service_worker(request):
+    """Serve o service worker em /service-worker.js (raiz do domínio),
+    não em /static/service-worker.js. O escopo de controle de um
+    service worker é limitado à pasta de onde ele foi servido - dentro
+    de /static/ ele só controlaria requisições dentro de /static/,
+    nunca as páginas do app. `finders.find` localiza o arquivo em
+    STATICFILES_DIRS tanto em desenvolvimento quanto em produção (o
+    arquivo está versionado no repo, não é gerado pelo collectstatic).
+    """
+    file_path = finders.find('service-worker.js')
+    with open(file_path, 'rb') as f:
+        content = f.read()
+    return HttpResponse(content, content_type='application/javascript')
 
 
 def privacy_policy(request):
