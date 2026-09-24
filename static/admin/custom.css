@@ -1,0 +1,43 @@
+/* Sobrepõe o tema "darkly" (Bootswatch) do django-jazzmin com as cores
+   exatas da nossa marca (mesmos tokens de base.html). O tema pronto é
+   só o ponto de partida - aqui a gente acerta pra bater com o app. */
+
+:root {
+    --ls-accent: #5e6ad2;
+    --ls-accent-hover: #4b56c2;
+    --ls-canvas: #313338;
+    --ls-surface: #2b2d31;
+}
+
+.main-sidebar,
+.brand-link {
+    background-color: var(--ls-canvas) !important;
+}
+
+.content-wrapper {
+    background-color: var(--ls-canvas) !important;
+}
+
+.nav-sidebar .nav-link.active {
+    background-color: var(--ls-accent) !important;
+}
+
+.nav-sidebar .nav-link:hover {
+    background-color: var(--ls-accent-hover) !important;
+}
+
+.btn-primary,
+.btn-primary:hover {
+    background-color: var(--ls-accent) !important;
+    border-color: var(--ls-accent) !important;
+}
+
+a,
+.small-box .icon {
+    color: var(--ls-accent);
+}
+
+.card,
+.card-primary.card-outline {
+    border-top-color: var(--ls-accent) !important;
+}

@@ -2,8 +2,10 @@ from django.contrib import admin
 from .models import Company, Membership, Product, StockMovement
 from .forms import ProductForm
 from django.contrib.admin import AdminSite
+from django.contrib.auth import REDIRECT_FIELD_NAME
 from django.contrib.auth.admin import UserAdmin
 from django.contrib.auth.models import User, Group
+from django.urls import reverse
 
 
 # Exposes Product in /admin so the owner (Marcos, PRD persona) can
@@ -13,6 +15,26 @@ from django.contrib.auth.models import User, Group
 class RestrictedAdminSite(AdminSite):
     def has_permission(self, request):
         return request.user.is_active and request.user.is_staff and request.user.is_superuser
+
+    def login(self, request, extra_context=None):
+        # Django's own admin login template carries a hidden "next"
+        # field defaulting to admin:index, so visiting /admin/login/
+        # directly (no ?next= in the URL) still lands back in the
+        # admin after login. O template do django-jazzmin não inclui
+        # esse campo - sem next nenhum, o Django cai no
+        # LOGIN_REDIRECT_URL global do projeto (product_list, a tela
+        # do app normal), não no admin. Forçamos o next aqui, antes de
+        # delegar pro login padrão, sem precisar sobrescrever o
+        # template do jazzmin.
+        # Checa GET e POST porque o campo pode faltar nos dois: no GET
+        # (visita direta, sem ?next= na URL) e no POST (o form do
+        # jazzmin não reenvia o campo hidden que carregaria isso). O
+        # redirect final é decidido lendo POST ou GET, então injetar
+        # só no GET não bastava - tinha que valer pro POST também.
+        if REDIRECT_FIELD_NAME not in request.GET and REDIRECT_FIELD_NAME not in request.POST:
+            request.GET = request.GET.copy()
+            request.GET[REDIRECT_FIELD_NAME] = reverse('admin:index', current_app=self.name)
+        return super().login(request, extra_context)
 
 
 admin_site = RestrictedAdminSite()
