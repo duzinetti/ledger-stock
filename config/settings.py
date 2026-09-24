@@ -25,6 +25,12 @@ ALLOWED_HOSTS = config(
 )
 
 INSTALLED_APPS = [
+    # jazzmin precisa vir ANTES de django.contrib.admin: o Django
+    # procura templates de admin (admin/base_site.html etc.) na ordem
+    # dos apps instalados, e para no primeiro que achar - se jazzmin
+    # viesse depois, o Django achava o template original antes e o
+    # reskin nunca entraria em ação.
+    'jazzmin',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -181,3 +187,45 @@ if not DEBUG:
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
+
+# JAZZMIN_SETTINGS controla conteúdo/comportamento do admin (textos,
+# ícones dos models no menu, o que aparece na busca global). Reaproveita
+# o ícone do PWA (mesmo logo do sidebar do app) em vez de outro asset.
+JAZZMIN_SETTINGS = {
+    "site_title": "LedgerStock Admin",
+    "site_header": "LedgerStock",
+    "site_brand": "LedgerStock",
+    "site_logo": "icons/icon-192.png",
+    "site_icon": "icons/icon-192.png",
+    "welcome_sign": "Painel interno - uso restrito a superusuário",
+    "copyright": "LedgerStock",
+    "custom_css": "admin/custom.css",
+    "icons": {
+        "auth.Group": "fas fa-users-cog",
+        "auth.User": "fas fa-user",
+        "inventory.Product": "fas fa-box",
+        "inventory.StockMovement": "fas fa-exchange-alt",
+        "inventory.Company": "fas fa-building",
+        "inventory.Membership": "fas fa-id-badge",
+    },
+}
+
+# JAZZMIN_UI_TWEAKS controla aparência visual - "darkly" (tema
+# Bootswatch escuro) como base mais próxima da nossa paleta já usada no
+# app; as cores exatas da marca (--accent #5e6ad2 etc.) entram por cima
+# via custom_css, porque os temas prontos não têm nossa cor exata.
+JAZZMIN_UI_TWEAKS = {
+    "theme": "darkly",
+    # Bootstrap 5 nativo (data-bs-theme) em vez de trocar o tema
+    # Bootswatch inteiro - "dark" fixo porque o app principal também
+    # não oferece toggle claro/escuro, é sempre escuro.
+    "default_theme_mode": "dark",
+    "navbar": "navbar-dark",
+    "no_navbar_border": True,
+    "navbar_fixed": True,
+    "sidebar": "sidebar-dark-primary",
+    "sidebar_fixed": True,
+    "sidebar_nav_flat_style": True,
+    "brand_colour": "navbar-dark",
+    "accent": "accent-primary",
+}
