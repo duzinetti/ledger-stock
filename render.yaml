@@ -7,7 +7,12 @@ services:
     # depois do build, antes do start), mas esse campo só existe nos
     # planos pagos do Render - no tier gratuito, o migrate entra junto
     # no buildCommand mesmo.
-    buildCommand: "pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate && python manage.py create_superuser_if_none_exists"
+    # --clear no collectstatic: sem isso, um resíduo de build anterior
+    # na pasta de estáticos pode deixar o manifesto (staticfiles.json,
+    # usado pelo storage com hash no nome do arquivo) sem entrada pra
+    # um arquivo novo - foi exatamente isso que quebrou /admin/ depois
+    # de adicionar manifest.json (PWA) e os assets do jazzmin.
+    buildCommand: "pip install -r requirements.txt && python manage.py collectstatic --noinput --clear && python manage.py migrate && python manage.py create_superuser_if_none_exists"
     startCommand: "gunicorn config.wsgi:application"
     envVars:
       # Gerada automaticamente pelo Render (valor aleatório de 256 bits) -
