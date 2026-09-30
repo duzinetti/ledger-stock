@@ -29,6 +29,9 @@ from .services import (
 from unittest.mock import patch
 import threading
 
+from rest_framework.test import APIClient
+from rest_framework_simplejwt.tokens import RefreshToken
+
 
 class CurrentQuantityTestCase(TestCase):
     def setUp(self):
@@ -1451,3 +1454,164 @@ class CreateSuperuserIfNoneExistsCommandTestCase(TestCase):
             call_command('create_superuser_if_none_exists')
 
         self.assertFalse(User.objects.filter(is_superuser=True).exists())
+
+
+class ApiAuthenticationTestCase(TestCase):
+    """Covers #35: a API exige um token JWT válido - sem ele, nenhuma
+    rota de dado responde; com usuário/senha corretos, o endpoint de
+    login devolve um token utilizável."""
+
+    def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
+        self.user = User.objects.create_user(username='api.user', password='senha-teste-123')
+        Membership.objects.create(user=self.user, company=self.company)
+        self.client = APIClient()
+
+    def test_request_without_token_is_rejected(self):
+        response = self.client.get(reverse('product-list'))
+        self.assertEqual(response.status_code, 401)
+
+    def test_login_endpoint_returns_access_and_refresh_tokens(self):
+        response = self.client.post(reverse('token_obtain_pair'), {
+            'username': 'api.user', 'password': 'senha-teste-123',
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('access', response.data)
+        self.assertIn('refresh', response.data)
+
+    def test_login_with_wrong_password_is_rejected(self):
+        response = self.client.post(reverse('token_obtain_pair'), {
+            'username': 'api.user', 'password': 'senha-errada',
+        })
+        self.assertEqual(response.status_code, 401)
+
+    def test_request_with_valid_token_succeeds(self):
+        token = RefreshToken.for_user(self.user).access_token
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+        response = self.client.get(reverse('product-list'))
+        self.assertEqual(response.status_code, 200)
+
+
+class ProductApiTestCase(TestCase):
+    """Covers #35: CRUD de produto via API - mesmo isolamento
+    multi-tenant das views HTML (queryset filtrado por company), e
+    company nunca é aceita do cliente (sempre atribuída pela view a
+    partir de quem está autenticado)."""
+
+    def setUp(self):
+        self.company_a = Company.objects.create(name='Empresa A')
+        self.company_b = Company.objects.create(name='Empresa B')
+        self.user_a = User.objects.create_user(username='dono_a', password='senha-teste-123')
+        Membership.objects.create(user=self.user_a, company=self.company_a)
+
+        self.product_a = Product.objects.create(
+            company=self.company_a, name='Produto A', price=10, minimum_quantity=1
+        )
+        self.product_b = Product.objects.create(
+            company=self.company_b, name='Produto B', price=20, minimum_quantity=1
+        )
+
+        self.client = APIClient()
+        token = RefreshToken.for_user(self.user_a).access_token
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+
+    def test_list_only_shows_own_companys_products(self):
+        response = self.client.get(reverse('product-list'))
+        names = [p['name'] for p in response.data]
+        self.assertIn('Produto A', names)
+        self.assertNotIn('Produto B', names)
+
+    def test_retrieve_of_other_companys_product_is_404(self):
+        response = self.client.get(reverse('product-detail', args=[self.product_b.id]))
+        self.assertEqual(response.status_code, 404)
+
+    def test_create_assigns_authenticated_users_company_ignoring_client_value(self):
+        response = self.client.post(reverse('product-list'), {
+            'name': 'Produto Novo', 'price': '15.00', 'minimum_quantity': 5,
+            'company': self.company_b.id,  # tentativa de burlar - deve ser ignorado
+        })
+        self.assertEqual(response.status_code, 201)
+        created = Product.objects.get(id=response.data['id'])
+        self.assertEqual(created.company_id, self.company_a.id)
+
+    def test_delete_is_not_allowed(self):
+        response = self.client.delete(reverse('product-detail', args=[self.product_a.id]))
+        self.assertEqual(response.status_code, 405)
+
+
+class StockMovementApiTestCase(TestCase):
+    """Covers #35: criação de movimentação via API passa obrigatoriamente
+    por services.register_movement() - mesma trava/validação da tela
+    normal (movement_create), não um serializer.save() direto que
+    bypassaria a regra de negócio."""
+
+    def setUp(self):
+        self.company_a = Company.objects.create(name='Empresa A')
+        self.company_b = Company.objects.create(name='Empresa B')
+        self.user_a = User.objects.create_user(username='dono_a', password='senha-teste-123')
+        Membership.objects.create(user=self.user_a, company=self.company_a)
+
+        self.product = Product.objects.create(
+            company=self.company_a, name='Produto', price=10, minimum_quantity=1
+        )
+        register_movement(self.product.id, movement_type='IN', quantity=20, is_sale=False)
+
+        self.product_b = Product.objects.create(
+            company=self.company_b, name='Produto B', price=10, minimum_quantity=1
+        )
+
+        self.client = APIClient()
+        token = RefreshToken.for_user(self.user_a).access_token
+        self.client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
+
+    def test_valid_out_movement_is_created_and_deducts_stock(self):
+        response = self.client.post(reverse('movement-list'), {
+            'product': self.product.id, 'type': 'OUT', 'quantity': 5,
+        })
+        self.assertEqual(response.status_code, 201)
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.current_quantity, 15)
+
+    def test_out_movement_above_stock_returns_400_not_500(self):
+        response = self.client.post(reverse('movement-list'), {
+            'product': self.product.id, 'type': 'OUT', 'quantity': 999,
+        })
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(self.product.movements.count(), 1)  # só a entrada do setUp
+
+    def test_invalid_movement_type_returns_400(self):
+        response = self.client.post(reverse('movement-list'), {
+            'product': self.product.id, 'type': 'XX', 'quantity': 1,
+        })
+        self.assertEqual(response.status_code, 400)
+
+    def test_movement_on_other_companys_product_is_404(self):
+        response = self.client.post(reverse('movement-list'), {
+            'product': self.product_b.id, 'type': 'IN', 'quantity': 5,
+        })
+        self.assertEqual(response.status_code, 404)
+
+    def test_list_only_shows_own_companys_movements(self):
+        register_movement(self.product_b.id, movement_type='IN', quantity=5, is_sale=False)
+        response = self.client.get(reverse('movement-list'))
+        product_ids = {m['product'] for m in response.data}
+        self.assertNotIn(self.product_b.id, product_ids)
+
+    def test_update_is_not_allowed(self):
+        movement = register_movement(self.product.id, movement_type='OUT', quantity=1)
+        response = self.client.patch(reverse('movement-detail', args=[movement.id]), {'quantity': 2})
+        self.assertEqual(response.status_code, 405)
+
+    def test_delete_is_not_allowed(self):
+        movement = register_movement(self.product.id, movement_type='OUT', quantity=1)
+        response = self.client.delete(reverse('movement-detail', args=[movement.id]))
+        self.assertEqual(response.status_code, 405)
+
+    def test_created_movement_freezes_unit_price_and_records_user(self):
+        response = self.client.post(reverse('movement-list'), {
+            'product': self.product.id, 'type': 'OUT', 'quantity': 2,
+        })
+        self.assertEqual(response.status_code, 201)
+        movement = StockMovement.objects.get(id=response.data['id'])
+        self.assertEqual(movement.unit_price, self.product.price)
+        self.assertEqual(movement.user, self.user_a)

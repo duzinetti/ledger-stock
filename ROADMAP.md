@@ -121,9 +121,18 @@ o PRD é explícito que "done" é o MVP no ar, não tudo isso completo.
       `is_sale` aplicou `default=True` a movimentações antigas (inclusive
       Entradas), corrigido com migration de dados + `CheckConstraint`
       de banco (`type='OUT' OR is_sale=False`)
-- [ ] API REST (DRF + JWT), reaproveitando o `services.py` já existente
-- [ ] Exportação de relatório (CSV/PDF)
-- [ ] Reskin do admin (`django-jazzmin`) e estilização geral
+- [x] API REST (DRF + JWT), reaproveitando o `services.py` já existente
+      (`#35`) — escopo inicial: produtos (list/create/retrieve/update)
+      e movimentações (list/create), isolamento por empresa replicado
+      no queryset da API, criação de movimentação chamando
+      `services.register_movement()` (nunca um `serializer.save()`
+      direto, pra não bypassar a trava/validação). Documentação
+      navegável automática em `/api/docs/` (drf-spectacular). Ainda
+      sem consumidor real confirmado - motivado pela possibilidade de
+      integração com o PDV da loja piloto (ver memória de sessão sobre
+      a Speedshop), não confirmado se o software suporta isso.
+- [x] Exportação de relatório (CSV/PDF)
+- [x] Reskin do admin (`django-jazzmin`) e estilização geral
       (Bootstrap/Tailwind)
 
 ---
@@ -186,16 +195,15 @@ Alinhado à Seção 5 do PRD.
 ## Próxima ação recomendada
 
 MVP no ar em produção (Render + Neon Postgres, `v1.0.0`,
-`ledger-stock.onrender.com`), com rate limiting (django-axes),
-dashboard, categoria estruturada e relatório de vendas (semanal/mensal
-por produto) já entregues e testados (115 testes).
+`ledger-stock.onrender.com`). Todos os itens de V2 planejados
+originalmente foram entregues: `#36` exportação CSV, `#48` PWA,
+`#37` reskin do admin (jazzmin), `#35` API REST (DRF + JWT) — 136
+testes.
 
-V2 restante em aberto: `#48` PWA, `#37` reskin do admin,
-`#36` exportação de relatório (CSV/PDF), `#35` API REST. Recomendação:
-**`#36` exportação de relatório em seguida** — é extensão direta do
-relatório de vendas que acabou de sair (mesma tela, só adiciona um
-botão de download), serve a loja piloto de verdade (levar o relatório
-pra contador, guardar registro fora do sistema), e é escopo pequeno.
-`#37` (reskin do admin) tem prioridade baixa porque o admin é
-dev-only (só superusuário, não é tela de uso diário da loja). `#35`
-(API REST) continua por último - não existe consumidor real ainda.
+Nada de V2 restando na lista original. Itens abertos hoje são todos
+"Later" (sem prazo definido, ver seção abaixo): app mobile nativo
+(`#43`), 2FA (`#42`), previsão de demanda (`#41`), integração
+PDV/marketplace (`#40`), gestão de fornecedores (`#39`), proteção de
+dados/LGPD (`#52`). `#40` (PDV) é o mais próximo de virar prioridade
+real, dependendo de uma resposta ainda pendente sobre se o PDV da loja
+piloto (Speedshop) suporta algum tipo de integração externa.
