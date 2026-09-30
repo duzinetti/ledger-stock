@@ -38,6 +38,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'axes',
+    'rest_framework',
+    'drf_spectacular',
     'inventory',
 ]
 
@@ -228,4 +230,32 @@ JAZZMIN_UI_TWEAKS = {
     "sidebar_nav_flat_style": True,
     "brand_colour": "navbar-dark",
     "accent": "accent-primary",
+}
+
+# API REST (#35): autenticação por JWT em vez de sessão - o token
+# carrega a identidade do chamador sozinho, sem precisar de cookie
+# nem CSRF, o que faz sentido pra um consumidor externo (ex.: um
+# sistema de PDV) que não é um navegador guardando sessão.
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+    ),
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
+    ),
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+SIMPLE_JWT = {
+    # Access token curto (some minutos) - se vazar, a janela de uso
+    # indevido é pequena. Refresh token mais longo pra não precisar
+    # logar nele de novo toda hora.
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=30),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'LedgerStock API',
+    'DESCRIPTION': 'API para integração externa com o controle de estoque (produtos e movimentações).',
+    'VERSION': '1.0.0',
 }
