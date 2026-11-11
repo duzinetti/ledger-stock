@@ -6,7 +6,7 @@ from django.conf import settings
 from django.contrib.auth.models import Group, User
 from django.core.management import call_command
 from django.db import connection, transaction
-from django.db.utils import IntegrityError
+from django.db.utils import IntegrityError, ProgrammingError
 from django.test import TestCase, TransactionTestCase, skipUnlessDBFeature
 from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
@@ -341,6 +341,34 @@ class StockMovementConstraintsTestCase(TestCase):
                     product=self.product, type='IN', quantity=5,
                     unit_price=self.product.price, is_sale=True,
                 )
+
+
+class StockMovementImmutabilityTriggerTestCase(TestCase):
+    """Covers migration 0017: StockMovement é um registro histórico - o
+    próprio Postgres recusa UPDATE/DELETE direto na tabela, não só a
+    camada de aplicação (admin/API). Diferente de StockMovementConstraintsTestCase:
+    aquelas CheckConstraints validam *valores* escritos; esse trigger
+    bloqueia a *operação* em si, mesmo com valores válidos.
+    """
+
+    def setUp(self):
+        self.company = Company.objects.create(name='Empresa Teste')
+        self.product = Product.objects.create(
+            company=self.company, name='M6 Screw', price=0.50, minimum_quantity=10
+        )
+        self.movement = StockMovement.objects.create(
+            product=self.product, type='IN', quantity=10, unit_price=self.product.price, is_sale=False
+        )
+
+    def test_updating_a_movement_is_rejected_at_db_level(self):
+        with self.assertRaises(ProgrammingError):
+            with transaction.atomic():
+                StockMovement.objects.filter(pk=self.movement.pk).update(reason='tentativa de edição')
+
+    def test_deleting_a_movement_is_rejected_at_db_level(self):
+        with self.assertRaises(ProgrammingError):
+            with transaction.atomic():
+                self.movement.delete()
 
 
 class ProductSoftDeleteTestCase(TestCase):
@@ -1246,6 +1274,30 @@ class DashboardViewTestCase(TestCase):
         self.assertEqual(response.context['movement_count'], 2)
 
 
+def _create_movement_with_date(product, movement_type, quantity, date, is_sale=True):
+    """Insere uma movimentação já com a data escolhida, via SQL direto.
+
+    Existe só pra teste: o campo StockMovement.date tem auto_now_add=True,
+    que sobrescreve qualquer valor passado em .save()/.create() - só
+    aceita "agora". E dar .update(date=...) depois de criar (o jeito
+    antigo de simular uma venda "do passado") agora é bloqueado pelo
+    trigger de imutabilidade do banco (migration 0017). Um INSERT bruto
+    contorna as duas coisas: o trigger só pega UPDATE/DELETE, nunca INSERT.
+    """
+    with connection.cursor() as cursor:
+        cursor.execute(
+            """
+            INSERT INTO inventory_stockmovement
+                (product_id, type, quantity, date, reason, user_id, is_sale, unit_price)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING id
+            """,
+            [product.id, movement_type, quantity, date, '', None, is_sale, product.price],
+        )
+        movement_id = cursor.fetchone()[0]
+    return StockMovement.objects.get(pk=movement_id)
+
+
 class SalesReportViewTestCase(TestCase):
     """Covers #51: quantidade e valor vendido por produto, numa semana,
     usando o unit_price congelado - não o preço atual do produto."""
@@ -1299,11 +1351,8 @@ class SalesReportViewTestCase(TestCase):
         self.assertEqual(response.context['total_quantity'], 0)
 
     def test_sale_from_last_week_is_excluded_from_current_week_view(self):
-        movement = register_movement(self.product.id, movement_type='OUT', quantity=3, is_sale=True)
         last_week = timezone.now() - timedelta(days=timezone.localdate().weekday() + 1)
-        # .update() pula o auto_now_add do campo date, que só se aplica
-        # em .save() - é o jeito de simular uma movimentação antiga em teste.
-        StockMovement.objects.filter(pk=movement.pk).update(date=last_week)
+        _create_movement_with_date(self.product, 'OUT', 3, last_week, is_sale=True)
 
         self.client.force_login(self.user)
 
@@ -1320,9 +1369,10 @@ class SalesReportViewTestCase(TestCase):
         first_of_month = timezone.localdate().replace(day=1)
 
         register_movement(self.product.id, movement_type='OUT', quantity=2, is_sale=True)
-        movement_early = register_movement(self.product.id, movement_type='OUT', quantity=5, is_sale=True)
-        StockMovement.objects.filter(pk=movement_early.pk).update(
-            date=timezone.make_aware(datetime.combine(first_of_month, datetime.min.time()))
+        _create_movement_with_date(
+            self.product, 'OUT', 5,
+            timezone.make_aware(datetime.combine(first_of_month, datetime.min.time())),
+            is_sale=True,
         )
 
         self.client.force_login(self.user)
@@ -1331,10 +1381,11 @@ class SalesReportViewTestCase(TestCase):
         self.assertEqual(response.context['total_quantity'], 7)
 
     def test_sale_from_last_month_is_excluded_from_current_month_view(self):
-        movement = register_movement(self.product.id, movement_type='OUT', quantity=4, is_sale=True)
         last_month = _add_months(timezone.localdate().replace(day=1), -1)
-        StockMovement.objects.filter(pk=movement.pk).update(
-            date=timezone.make_aware(datetime.combine(last_month, datetime.min.time()))
+        _create_movement_with_date(
+            self.product, 'OUT', 4,
+            timezone.make_aware(datetime.combine(last_month, datetime.min.time())),
+            is_sale=True,
         )
 
         self.client.force_login(self.user)
